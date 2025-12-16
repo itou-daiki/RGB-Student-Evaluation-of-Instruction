@@ -1,0 +1,395 @@
+"""
+授業アンケートデータ処理モジュール
+
+CSVデータの読み込み、クレンジング、スコアリング、集計を行う関数群
+"""
+
+import pandas as pd
+import numpy as np
+from typing import Dict, List, Tuple, Optional
+import io
+
+
+# スコアリング変換マッピング（4件法）
+SCORE_MAPPING = {
+    # 4点（最高評価）
+    "とてもそう思う": 4,
+    "当てはまる": 4,
+    "とても当てはまる": 4,
+    "強くそう思う": 4,
+
+    # 3点
+    "そう思う": 3,
+    "どちらかといえばそう思う": 3,
+    "やや当てはまる": 3,
+    "どちらかといえば当てはまる": 3,
+
+    # 2点
+    "あまりそう思わない": 2,
+    "どちらかといえばそう思わない": 2,
+    "あまり当てはまらない": 2,
+    "どちらかといえば当てはまらない": 2,
+
+    # 1点（最低評価）
+    "思わない": 1,
+    "そう思わない": 1,
+    "当てはまらない": 1,
+    "全く当てはまらない": 1,
+    "全くそう思わない": 1,
+}
+
+
+# 除外するメタデータカラム名（これらは質問項目として扱わない）
+METADATA_COLUMNS = [
+    "Id",
+    "id",
+    "ID",
+    "開始時刻",
+    "完了時刻",
+    "メール",
+    "メールアドレス",
+    "Email",
+    "email",
+    "名前",
+    "氏名",
+    "Name",
+    "name",
+    "タイムスタンプ",
+    "Timestamp",
+    "timestamp",
+]
+
+# 必須カラム（科目名識別用）
+SUBJECT_COLUMN_PATTERNS = [
+    "科目名",
+    "科目",
+    "教科名",
+    "授業名",
+]
+
+# 出席番号カラムのパターン
+STUDENT_ID_PATTERNS = [
+    "出席番号",
+    "学籍番号",
+    "学生番号",
+]
+
+# 自由記述カラムのパターン
+FREE_TEXT_PATTERNS = [
+    "意見・感想",
+    "意見",
+    "感想",
+    "コメント",
+    "自由記述",
+    "その他",
+    "記入してください",
+    "ご記入ください",
+]
+
+
+def convert_to_score(value: str) -> Optional[float]:
+    """
+    4件法のテキスト回答を数値スコアに変換
+
+    Args:
+        value: 回答テキスト
+
+    Returns:
+        float: 変換後のスコア（1-4）、変換できない場合はNone
+    """
+    if pd.isna(value):
+        return None
+
+    # 文字列に変換して前後の空白を削除
+    value_str = str(value).strip()
+
+    # マッピングテーブルから検索
+    return SCORE_MAPPING.get(value_str, None)
+
+
+def detect_subject_column(df: pd.DataFrame) -> Optional[str]:
+    """
+    科目名カラムを自動検出
+
+    Args:
+        df: データフレーム
+
+    Returns:
+        str: 科目名カラム名、見つからない場合はNone
+    """
+    for col in df.columns:
+        for pattern in SUBJECT_COLUMN_PATTERNS:
+            if pattern in col:
+                return col
+    return None
+
+
+def detect_student_id_column(df: pd.DataFrame) -> Optional[str]:
+    """
+    出席番号カラムを自動検出
+
+    Args:
+        df: データフレーム
+
+    Returns:
+        str: 出席番号カラム名、見つからない場合はNone
+    """
+    for col in df.columns:
+        for pattern in STUDENT_ID_PATTERNS:
+            if pattern in col:
+                return col
+    return None
+
+
+def detect_free_text_column(df: pd.DataFrame) -> Optional[str]:
+    """
+    自由記述カラムを自動検出
+
+    Args:
+        df: データフレーム
+
+    Returns:
+        str: 自由記述カラム名、見つからない場合はNone
+    """
+    # より具体的なパターンから順に検索
+    # （「意見」だけでなく「ご記入ください」などの具体的なパターンを優先）
+    priority_patterns = ["ご記入ください", "記入してください", "意見・感想", "自由記述"]
+
+    # 優先パターンで検索
+    for pattern in priority_patterns:
+        for col in df.columns:
+            if pattern in col:
+                return col
+
+    # その他のパターンで検索
+    for col in df.columns:
+        for pattern in FREE_TEXT_PATTERNS:
+            if pattern in col and pattern not in priority_patterns:
+                return col
+
+    return None
+
+
+def identify_question_columns(df: pd.DataFrame) -> List[str]:
+    """
+    質問項目カラムを識別（メタデータ、科目名、出席番号、自由記述を除外）
+
+    Args:
+        df: データフレーム
+
+    Returns:
+        List[str]: 質問項目カラムのリスト
+    """
+    # 除外カラムを特定
+    exclude_cols = set()
+
+    # メタデータカラム
+    for col in df.columns:
+        if col in METADATA_COLUMNS:
+            exclude_cols.add(col)
+
+    # 科目名カラム
+    subject_col = detect_subject_column(df)
+    if subject_col:
+        exclude_cols.add(subject_col)
+
+    # 出席番号カラム
+    student_id_col = detect_student_id_column(df)
+    if student_id_col:
+        exclude_cols.add(student_id_col)
+
+    # 自由記述カラム
+    free_text_col = detect_free_text_column(df)
+    if free_text_col:
+        exclude_cols.add(free_text_col)
+
+    # 質問項目カラムを抽出
+    question_cols = [col for col in df.columns if col not in exclude_cols]
+
+    return question_cols
+
+
+def load_and_process_csv(uploaded_file) -> Tuple[pd.DataFrame, Dict]:
+    """
+    アップロードされたCSVファイルを読み込み、処理する
+
+    Args:
+        uploaded_file: StreamlitのUploadedFileオブジェクト
+
+    Returns:
+        Tuple[pd.DataFrame, Dict]: 処理済みデータフレームとメタデータ
+    """
+    # CSVを読み込み（エンコーディングを自動判定）
+    try:
+        df = pd.read_csv(uploaded_file, encoding='utf-8-sig')
+    except UnicodeDecodeError:
+        try:
+            df = pd.read_csv(uploaded_file, encoding='shift-jis')
+        except UnicodeDecodeError:
+            df = pd.read_csv(uploaded_file, encoding='cp932')
+
+    # カラム検出
+    subject_col = detect_subject_column(df)
+    student_id_col = detect_student_id_column(df)
+    free_text_col = detect_free_text_column(df)
+    question_cols = identify_question_columns(df)
+
+    # メタデータを作成
+    metadata = {
+        'subject_column': subject_col,
+        'student_id_column': student_id_col,
+        'free_text_column': free_text_col,
+        'question_columns': question_cols,
+        'total_responses': len(df),
+    }
+
+    return df, metadata
+
+
+def calculate_statistics(df: pd.DataFrame, question_cols: List[str]) -> pd.DataFrame:
+    """
+    質問項目ごとの統計情報を計算
+
+    Args:
+        df: データフレーム
+        question_cols: 質問項目カラムのリスト
+
+    Returns:
+        pd.DataFrame: 統計情報（質問、平均値、各スコアの回答数）
+    """
+    stats_list = []
+
+    for question in question_cols:
+        # スコアに変換
+        scores = df[question].apply(convert_to_score)
+
+        # 有効な回答数
+        valid_count = scores.notna().sum()
+
+        if valid_count == 0:
+            continue
+
+        # 平均値
+        mean_score = scores.mean()
+
+        # 各スコアの分布
+        score_counts = scores.value_counts().sort_index()
+        count_4 = score_counts.get(4.0, 0)
+        count_3 = score_counts.get(3.0, 0)
+        count_2 = score_counts.get(2.0, 0)
+        count_1 = score_counts.get(1.0, 0)
+
+        stats_list.append({
+            '質問項目': question,
+            '平均値': mean_score,
+            '有効回答数': valid_count,
+            '4点の回答数': int(count_4),
+            '3点の回答数': int(count_3),
+            '2点の回答数': int(count_2),
+            '1点の回答数': int(count_1),
+        })
+
+    return pd.DataFrame(stats_list)
+
+
+def get_overall_average(df: pd.DataFrame, question_cols: List[str]) -> float:
+    """
+    全質問の総合平均点を計算
+
+    Args:
+        df: データフレーム
+        question_cols: 質問項目カラムのリスト
+
+    Returns:
+        float: 総合平均点
+    """
+    all_scores = []
+
+    for question in question_cols:
+        scores = df[question].apply(convert_to_score)
+        all_scores.extend(scores.dropna().tolist())
+
+    if len(all_scores) == 0:
+        return 0.0
+
+    return np.mean(all_scores)
+
+
+def extract_free_comments(df: pd.DataFrame, free_text_col: str,
+                         exclude_empty: bool = True) -> List[str]:
+    """
+    自由記述を抽出
+
+    Args:
+        df: データフレーム
+        free_text_col: 自由記述カラム名
+        exclude_empty: 空白や「特になし」を除外するか
+
+    Returns:
+        List[str]: 自由記述のリスト
+    """
+    if not free_text_col or free_text_col not in df.columns:
+        return []
+
+    comments = df[free_text_col].tolist()
+
+    if exclude_empty:
+        # 空白、NaN、「特になし」「特にありません」などを除外
+        exclude_patterns = ['特になし', '特にありません', 'なし', '無し', '']
+        comments = [
+            str(c).strip() for c in comments
+            if pd.notna(c) and str(c).strip() not in exclude_patterns
+        ]
+
+    return comments
+
+
+def create_download_data(stats_df: pd.DataFrame, overall_avg: float,
+                        subject_name: str = "全体") -> pd.DataFrame:
+    """
+    ダウンロード用のExcelデータを作成
+
+    Args:
+        stats_df: 統計データフレーム
+        overall_avg: 総合平均点
+        subject_name: 科目名
+
+    Returns:
+        pd.DataFrame: ダウンロード用データ
+    """
+    # データをコピー
+    download_df = stats_df.copy()
+
+    # パーセンテージカラムを追加
+    download_df['4点の割合(%)'] = (
+        download_df['4点の回答数'] / download_df['有効回答数'] * 100
+    ).round(1)
+    download_df['3点の割合(%)'] = (
+        download_df['3点の回答数'] / download_df['有効回答数'] * 100
+    ).round(1)
+    download_df['2点の割合(%)'] = (
+        download_df['2点の回答数'] / download_df['有効回答数'] * 100
+    ).round(1)
+    download_df['1点の割合(%)'] = (
+        download_df['1点の回答数'] / download_df['有効回答数'] * 100
+    ).round(1)
+
+    # 平均値を小数点2桁に丸める
+    download_df['平均値'] = download_df['平均値'].round(2)
+
+    # カラムの順序を整理
+    download_df = download_df[[
+        '質問項目',
+        '平均値',
+        '有効回答数',
+        '4点の回答数',
+        '4点の割合(%)',
+        '3点の回答数',
+        '3点の割合(%)',
+        '2点の回答数',
+        '2点の割合(%)',
+        '1点の回答数',
+        '1点の割合(%)',
+    ]]
+
+    return download_df
