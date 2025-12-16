@@ -17,6 +17,7 @@ from data_processor import (
     extract_free_comments,
     create_download_data,
     detect_subject_column,
+    write_to_template,
 )
 
 
@@ -291,45 +292,73 @@ def main():
 
             st.markdown("""
             集計結果をExcelファイルとしてダウンロードできます。
-            ダウンロードされるデータには、質問ごとの平均値、回答数、分布が含まれます。
             """)
 
-            # ダウンロード用データを作成
-            download_df = create_download_data(stats_df, overall_avg, selected_subject)
-
-            # Excelファイルとして出力
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # 集計結果シート
-                download_df.to_excel(writer, sheet_name='集計結果', index=False)
-
-                # 自由記述シート（ある場合）
-                free_text_col = metadata['free_text_column']
-                if free_text_col:
-                    comments = extract_free_comments(filtered_df, free_text_col, exclude_empty=True)
-                    if comments:
-                        comments_df = pd.DataFrame({'意見・感想': comments})
-                        comments_df.to_excel(writer, sheet_name='自由記述', index=False)
-
-                # サマリーシート
-                summary_data = {
-                    '項目': ['科目名', '回答者数', '質問項目数', '総合平均点'],
-                    '値': [selected_subject, len(filtered_df), len(question_cols), f"{overall_avg:.2f}"]
-                }
-                summary_df = pd.DataFrame(summary_data)
-                summary_df.to_excel(writer, sheet_name='サマリー', index=False)
-
-            output.seek(0)
-
-            # ダウンロードボタン
-            st.download_button(
-                label="📥 Excelファイルをダウンロード",
-                data=output,
-                file_name=f"survey_analysis_{selected_subject}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            # ダウンロード形式の選択
+            download_format = st.radio(
+                "ダウンロード形式を選択してください",
+                ["テンプレートを使用", "標準形式"],
+                help="テンプレートを使用する場合、全教科のデータがテンプレートに書き込まれます"
             )
 
-            st.success("✅ ダウンロードボタンをクリックしてファイルを保存してください")
+            if download_format == "テンプレートを使用":
+                st.info("📄 テンプレート.xlsxに全教科のデータを書き込みます")
+
+                try:
+                    # テンプレートを使用してExcelファイルを生成
+                    output = write_to_template(combined_df, question_cols)
+
+                    # ダウンロードボタン
+                    st.download_button(
+                        label="📥 テンプレート形式でダウンロード",
+                        data=output,
+                        file_name="survey_analysis_template.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+
+                    st.success("✅ ダウンロードボタンをクリックしてファイルを保存してください")
+                except Exception as e:
+                    st.error(f"❌ テンプレートの処理中にエラーが発生しました: {str(e)}")
+
+            else:
+                st.info("📊 選択された科目の集計結果をダウンロードします")
+
+                # ダウンロード用データを作成
+                download_df = create_download_data(stats_df, overall_avg, selected_subject)
+
+                # Excelファイルとして出力
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    # 集計結果シート
+                    download_df.to_excel(writer, sheet_name='集計結果', index=False)
+
+                    # 自由記述シート（ある場合）
+                    free_text_col = metadata['free_text_column']
+                    if free_text_col:
+                        comments = extract_free_comments(filtered_df, free_text_col, exclude_empty=True)
+                        if comments:
+                            comments_df = pd.DataFrame({'意見・感想': comments})
+                            comments_df.to_excel(writer, sheet_name='自由記述', index=False)
+
+                    # サマリーシート
+                    summary_data = {
+                        '項目': ['科目名', '回答者数', '質問項目数', '総合平均点'],
+                        '値': [selected_subject, len(filtered_df), len(question_cols), f"{overall_avg:.2f}"]
+                    }
+                    summary_df = pd.DataFrame(summary_data)
+                    summary_df.to_excel(writer, sheet_name='サマリー', index=False)
+
+                output.seek(0)
+
+                # ダウンロードボタン
+                st.download_button(
+                    label="📥 標準形式でダウンロード",
+                    data=output,
+                    file_name=f"survey_analysis_{selected_subject}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+
+                st.success("✅ ダウンロードボタンをクリックしてファイルを保存してください")
 
     except Exception as e:
         st.error(f"❌ エラーが発生しました: {str(e)}")
