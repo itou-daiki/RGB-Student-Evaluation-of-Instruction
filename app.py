@@ -39,24 +39,24 @@ def main():
 
     # サイドバー
     st.sidebar.header("📁 データアップロード")
-    st.sidebar.markdown("CSVファイルをアップロードしてください")
+    st.sidebar.markdown("CSV/Excelファイルをアップロードしてください")
 
     # ファイルアップローダー（複数ファイル対応）
     uploaded_files = st.sidebar.file_uploader(
-        "アンケートCSVファイル",
-        type=['csv'],
+        "アンケートファイル",
+        type=['csv', 'xlsx', 'xls'],
         accept_multiple_files=True,
-        help="Google FormsやMicrosoft Forms等から出力されたCSVファイルをアップロードしてください"
+        help="Google FormsやMicrosoft Forms等から出力されたCSV/Excelファイルをアップロードしてください"
     )
 
     if not uploaded_files:
         # ファイルがアップロードされていない場合の説明
-        st.info("👈 サイドバーからCSVファイルをアップロードしてください")
+        st.info("👈 サイドバーからCSV/Excelファイルをアップロードしてください")
 
         st.markdown("""
         ### 使い方
 
-        1. **CSVファイルのアップロード**: サイドバーから授業アンケートのCSVファイルをアップロードします
+        1. **ファイルのアップロード**: サイドバーから授業アンケートのCSV/Excelファイルをアップロードします
         2. **科目の選択**: 複数科目のデータが含まれる場合、分析したい科目を選択できます
         3. **ダッシュボードの確認**: 回答者数、平均点、質問ごとの統計が表示されます
         4. **グラフの確認**: 質問ごとの平均点を視覚的に確認できます
@@ -65,7 +65,7 @@ def main():
 
         ### 対応フォーマット
 
-        - Google Forms、Microsoft Formsなどから出力されたCSV
+        - Google Forms、Microsoft Formsなどから出力されたCSV/Excel (.csv, .xlsx, .xls)
         - 質問項目の回答は4件法（「とてもそう思う」「そう思う」「あまりそう思わない」「思わない」）
         - 自動的に質問項目を検出し、スコアリングします
 

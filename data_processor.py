@@ -211,7 +211,7 @@ def identify_question_columns(df: pd.DataFrame) -> List[str]:
 
 def load_and_process_csv(uploaded_file) -> Tuple[pd.DataFrame, Dict]:
     """
-    アップロードされたCSVファイルを読み込み、処理する
+    アップロードされたCSVまたはExcelファイルを読み込み、処理する
 
     Args:
         uploaded_file: StreamlitのUploadedFileオブジェクト
@@ -219,14 +219,23 @@ def load_and_process_csv(uploaded_file) -> Tuple[pd.DataFrame, Dict]:
     Returns:
         Tuple[pd.DataFrame, Dict]: 処理済みデータフレームとメタデータ
     """
-    # CSVを読み込み（エンコーディングを自動判定）
-    try:
-        df = pd.read_csv(uploaded_file, encoding='utf-8-sig')
-    except UnicodeDecodeError:
+    # ファイル名から拡張子を取得
+    file_name = uploaded_file.name if hasattr(uploaded_file, 'name') else ''
+    file_extension = file_name.lower().split('.')[-1] if '.' in file_name else ''
+
+    # ExcelファイルかCSVファイルかを判定して読み込み
+    if file_extension in ['xlsx', 'xls']:
+        # Excelファイルを読み込み
+        df = pd.read_excel(uploaded_file, engine='openpyxl')
+    else:
+        # CSVを読み込み（エンコーディングを自動判定）
         try:
-            df = pd.read_csv(uploaded_file, encoding='shift-jis')
+            df = pd.read_csv(uploaded_file, encoding='utf-8-sig')
         except UnicodeDecodeError:
-            df = pd.read_csv(uploaded_file, encoding='cp932')
+            try:
+                df = pd.read_csv(uploaded_file, encoding='shift-jis')
+            except UnicodeDecodeError:
+                df = pd.read_csv(uploaded_file, encoding='cp932')
 
     # カラム検出
     subject_col = detect_subject_column(df)
