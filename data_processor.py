@@ -469,9 +469,21 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     # 全体の統計を計算
     overall_stats = calculate_statistics(df, question_cols)
 
+    # デバッグ: 質問項目数と統計データの確認
+    print(f"🔍 デバッグ情報 (write_to_template):")
+    print(f"  - 質問項目数: {len(question_cols)}")
+    print(f"  - 統計データの行数: {len(overall_stats)}")
+    print(f"  - 質問項目リスト (最初の5個): {question_cols[:5]}")
+    if len(question_cols) > 30:
+        print(f"  ⚠️ 警告: 質問項目が30個を超えています。余分な項目:")
+        print(f"    {question_cols[30:]}")
+
     # 全体データを書き込み（7行目、C列から開始）
+    # テンプレートは30個の質問項目まで対応（C列からAF列まで）
     row_idx = subject_row_mapping['全体']
-    for col_idx, avg in enumerate(overall_stats['平均値'].tolist(), start=3):  # C列=3
+    avg_values = overall_stats['平均値'].tolist()[:30]  # 最初の30個のみ
+
+    for col_idx, avg in enumerate(avg_values, start=3):  # C列=3
         ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
 
     # 各教科のデータを処理して書き込む
@@ -497,7 +509,9 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     subject_stats = calculate_statistics(subject_df, question_cols)
 
                     # データを書き込み（C列から開始）
-                    for col_idx, avg in enumerate(subject_stats['平均値'].tolist(), start=3):
+                    # テンプレートは30個の質問項目まで対応
+                    avg_values = subject_stats['平均値'].tolist()[:30]
+                    for col_idx, avg in enumerate(avg_values, start=3):
                         ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
         else:
             # デフォルトの自動マッピング（後方互換性のため）
@@ -554,7 +568,9 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     subject_stats = calculate_statistics(subject_df, question_cols)
 
                     # データを書き込み（C列から開始）
-                    for col_idx, avg in enumerate(subject_stats['平均値'].tolist(), start=3):
+                    # テンプレートは30個の質問項目まで対応
+                    avg_values = subject_stats['平均値'].tolist()[:30]
+                    for col_idx, avg in enumerate(avg_values, start=3):
                         ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
 
     # BytesIOに書き込み
