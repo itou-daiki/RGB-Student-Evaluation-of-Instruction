@@ -405,6 +405,7 @@ def create_download_data(stats_df: pd.DataFrame, overall_avg: float,
 
 
 def write_to_template(df: pd.DataFrame, question_cols: List[str],
+                     subject_mapping: Optional[Dict[str, List[str]]] = None,
                      template_path: str = "テンプレート.xlsx") -> io.BytesIO:
     """
     テンプレートExcelファイルに各教科のデータを書き込む
@@ -412,6 +413,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     Args:
         df: 全データを含むデータフレーム
         question_cols: 質問項目カラムのリスト
+        subject_mapping: ユーザーが選択した教科と科目のマッピング（教科名 -> 科目名リスト）
         template_path: テンプレートファイルのパス
 
     Returns:
@@ -437,18 +439,6 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         '家庭': 15,
     }
 
-    # 教科名の部分一致用キーワード
-    subject_keywords = {
-        '国語': ['国語', 'こくご'],
-        '数学': ['数学', 'すうがく'],
-        '地歴公民': ['地理', '歴史', '公民', '地歴', '社会'],
-        '理科': ['理科', '物理', '化学', '生物', '地学'],
-        '外国語': ['英語', '外国語', 'English'],
-        '保健体育': ['保健', '体育', 'たいいく'],
-        '芸術': ['音楽', '美術', '書道', '芸術'],
-        '家庭': ['家庭', 'かてい'],
-    }
-
     # 科目カラムを検出
     subject_col = detect_subject_column(df)
 
@@ -462,48 +452,85 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
 
     # 各教科のデータを処理して書き込む
     if subject_col and subject_col in df.columns:
-        # データに含まれる教科名を取得
-        unique_subjects = df[subject_col].unique()
-
-        # 各テンプレート教科について処理
-        for template_subject, row_idx in subject_row_mapping.items():
-            if template_subject == '全体':
-                continue
-
-            # 部分一致で教科を検索
-            matched_subjects = []
-            keywords = subject_keywords.get(template_subject, [])
-
-            for actual_subject in unique_subjects:
-                if pd.isna(actual_subject):
+        # ユーザーが選択したマッピングがある場合はそれを使用
+        if subject_mapping:
+            # ユーザー選択のマッピングを使用
+            for template_subject, row_idx in subject_row_mapping.items():
+                if template_subject == '全体':
                     continue
 
-                actual_subject_str = str(actual_subject)
+                # ユーザーが選択した科目のリストを取得
+                matched_subjects = subject_mapping.get(template_subject, [])
 
-                # 完全一致をチェック
-                if actual_subject_str == template_subject:
-                    matched_subjects.append(actual_subject)
+                # マッチした教科のデータをフィルタリング
+                if matched_subjects:
+                    subject_df = df[df[subject_col].isin(matched_subjects)]
+
+                    if len(subject_df) == 0:
+                        continue
+
+                    # 統計を計算
+                    subject_stats = calculate_statistics(subject_df, question_cols)
+
+                    # データを書き込み（C列から開始）
+                    for col_idx, avg in enumerate(subject_stats['平均値'].tolist(), start=3):
+                        ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
+        else:
+            # デフォルトの自動マッピング（後方互換性のため）
+            # 教科名の部分一致用キーワード
+            subject_keywords = {
+                '国語': ['国語', 'こくご'],
+                '数学': ['数学', 'すうがく'],
+                '地歴公民': ['地理', '歴史', '公民', '地歴', '社会'],
+                '理科': ['理科', '物理', '化学', '生物', '地学'],
+                '外国語': ['英語', '外国語', 'English'],
+                '保健体育': ['保健', '体育', 'たいいく'],
+                '芸術': ['音楽', '美術', '書道', '芸術'],
+                '家庭': ['家庭', 'かてい'],
+            }
+
+            # データに含まれる教科名を取得
+            unique_subjects = df[subject_col].unique()
+
+            # 各テンプレート教科について処理
+            for template_subject, row_idx in subject_row_mapping.items():
+                if template_subject == '全体':
                     continue
 
-                # キーワードによる部分一致をチェック
-                for keyword in keywords:
-                    if keyword in actual_subject_str:
+                # 部分一致で教科を検索
+                matched_subjects = []
+                keywords = subject_keywords.get(template_subject, [])
+
+                for actual_subject in unique_subjects:
+                    if pd.isna(actual_subject):
+                        continue
+
+                    actual_subject_str = str(actual_subject)
+
+                    # 完全一致をチェック
+                    if actual_subject_str == template_subject:
                         matched_subjects.append(actual_subject)
-                        break
+                        continue
 
-            # マッチした教科のデータをフィルタリング
-            if matched_subjects:
-                subject_df = df[df[subject_col].isin(matched_subjects)]
+                    # キーワードによる部分一致をチェック
+                    for keyword in keywords:
+                        if keyword in actual_subject_str:
+                            matched_subjects.append(actual_subject)
+                            break
 
-                if len(subject_df) == 0:
-                    continue
+                # マッチした教科のデータをフィルタリング
+                if matched_subjects:
+                    subject_df = df[df[subject_col].isin(matched_subjects)]
 
-                # 統計を計算
-                subject_stats = calculate_statistics(subject_df, question_cols)
+                    if len(subject_df) == 0:
+                        continue
 
-                # データを書き込み（C列から開始）
-                for col_idx, avg in enumerate(subject_stats['平均値'].tolist(), start=3):
-                    ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
+                    # 統計を計算
+                    subject_stats = calculate_statistics(subject_df, question_cols)
+
+                    # データを書き込み（C列から開始）
+                    for col_idx, avg in enumerate(subject_stats['平均値'].tolist(), start=3):
+                        ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
 
     # BytesIOに書き込み
     output = io.BytesIO()

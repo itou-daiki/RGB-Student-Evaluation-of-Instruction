@@ -304,21 +304,83 @@ def main():
             if download_format == "テンプレートを使用":
                 st.info("📄 テンプレート.xlsxに全教科のデータを書き込みます")
 
-                try:
-                    # テンプレートを使用してExcelファイルを生成
-                    output = write_to_template(combined_df, question_cols)
+                # 科目と教科のマッピング設定
+                st.markdown("### 📋 教科と科目のマッピング設定")
+                st.markdown("各教科にどの科目を含めるか選択してください。")
+
+                # データに含まれる科目名を取得
+                subject_col = detect_subject_column(combined_df)
+                if subject_col and subject_col in combined_df.columns:
+                    available_subjects = sorted([str(s) for s in combined_df[subject_col].unique() if pd.notna(s)])
+
+                    # 教科名のリスト
+                    template_subjects = ['国語', '数学', '地歴公民', '理科', '外国語', '保健体育', '芸術', '家庭']
+
+                    # 教科名ごとのデフォルトキーワード（初期選択のための推奨）
+                    default_keywords = {
+                        '国語': ['国語', 'こくご'],
+                        '数学': ['数学', 'すうがく'],
+                        '地歴公民': ['地理', '歴史', '公民', '地歴', '社会'],
+                        '理科': ['理科', '物理', '化学', '生物', '地学'],
+                        '外国語': ['英語', '外国語', 'English'],
+                        '保健体育': ['保健', '体育', 'たいいく'],
+                        '芸術': ['音楽', '美術', '書道', '芸術'],
+                        '家庭': ['家庭', 'かてい'],
+                    }
+
+                    # 教科ごとの科目選択（マルチセレクト）
+                    subject_mapping = {}
+
+                    # 2列レイアウト
+                    col1, col2 = st.columns(2)
+
+                    for idx, template_subject in enumerate(template_subjects):
+                        # 初期選択の推奨値を計算
+                        default_selected = []
+                        keywords = default_keywords.get(template_subject, [])
+
+                        for subject in available_subjects:
+                            # 完全一致または部分一致をチェック
+                            if subject == template_subject:
+                                default_selected.append(subject)
+                            else:
+                                for keyword in keywords:
+                                    if keyword in subject:
+                                        default_selected.append(subject)
+                                        break
+
+                        # 2列に分けて表示
+                        with col1 if idx % 2 == 0 else col2:
+                            selected = st.multiselect(
+                                f"**{template_subject}**",
+                                options=available_subjects,
+                                default=default_selected,
+                                key=f"subject_mapping_{template_subject}"
+                            )
+                            subject_mapping[template_subject] = selected
+
+                    st.markdown("---")
 
                     # ダウンロードボタン
-                    st.download_button(
-                        label="📥 テンプレート形式でダウンロード",
-                        data=output,
-                        file_name="survey_analysis_template.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
+                    if st.button("📥 テンプレート形式でダウンロード", type="primary"):
+                        try:
+                            # テンプレートを使用してExcelファイルを生成
+                            output = write_to_template(combined_df, question_cols, subject_mapping=subject_mapping)
 
-                    st.success("✅ ダウンロードボタンをクリックしてファイルを保存してください")
-                except Exception as e:
-                    st.error(f"❌ テンプレートの処理中にエラーが発生しました: {str(e)}")
+                            # ダウンロード用のリンクを生成
+                            st.download_button(
+                                label="💾 ファイルを保存",
+                                data=output,
+                                file_name="survey_analysis_template.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            )
+
+                            st.success("✅ ダウンロードボタンをクリックしてファイルを保存してください")
+                        except Exception as e:
+                            st.error(f"❌ テンプレートの処理中にエラーが発生しました: {str(e)}")
+                            st.exception(e)
+                else:
+                    st.warning("⚠️ 科目名カラムが検出されませんでした。テンプレート形式でのダウンロードができません。")
 
             else:
                 st.info("📊 選択された科目の集計結果をダウンロードします")
