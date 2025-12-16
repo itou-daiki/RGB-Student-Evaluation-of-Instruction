@@ -406,6 +406,7 @@ def create_download_data(stats_df: pd.DataFrame, overall_avg: float,
 
 def write_to_template(df: pd.DataFrame, question_cols: List[str],
                      subject_mapping: Optional[Dict[str, List[str]]] = None,
+                     placeholders: Optional[Dict[str, str]] = None,
                      template_path: str = "テンプレート.xlsx") -> io.BytesIO:
     """
     テンプレートExcelファイルに各教科のデータを書き込む
@@ -414,6 +415,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         df: 全データを含むデータフレーム
         question_cols: 質問項目カラムのリスト
         subject_mapping: ユーザーが選択した教科と科目のマッピング（教科名 -> 科目名リスト）
+        placeholders: テンプレートのプレースホルダー（{Y}, {n}, {MM}など）とその値
         template_path: テンプレートファイルのパス
 
     Returns:
@@ -421,10 +423,31 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     """
     import openpyxl
     from openpyxl.utils import get_column_letter
+    import re
 
     # テンプレートファイルを読み込む
     wb = openpyxl.load_workbook(template_path)
     ws = wb['概要']
+
+    # プレースホルダーを置換する関数
+    def replace_placeholders(text):
+        if placeholders and text:
+            for key, value in placeholders.items():
+                text = text.replace(f'{{{key}}}', str(value))
+        return text
+
+    # 1行目と2行目のプレースホルダーを置換
+    for row_idx in [1, 2]:
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            if cell.value and isinstance(cell.value, str):
+                cell.value = replace_placeholders(cell.value)
+
+    # 7行目から16行目のB列（質問項目列）のプレースホルダーを置換
+    for row_idx in range(7, 17):
+        cell = ws.cell(row=row_idx, column=2)  # B列
+        if cell.value and isinstance(cell.value, str):
+            cell.value = replace_placeholders(cell.value)
 
     # 教科名のマッピング（テンプレートの行番号）
     subject_row_mapping = {

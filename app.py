@@ -37,13 +37,10 @@ def main():
     st.title("📊 授業アンケート分析システム")
     st.markdown("---")
 
-    # サイドバー
-    st.sidebar.header("📁 データアップロード")
-    st.sidebar.markdown("CSV/Excelファイルをアップロードしてください")
-
-    # ファイルアップローダー（複数ファイル対応）
-    uploaded_files = st.sidebar.file_uploader(
-        "アンケートファイル",
+    # ファイルアップロード（メインエリア）
+    st.header("📁 データアップロード")
+    uploaded_files = st.file_uploader(
+        "CSV/Excelファイルをアップロードしてください",
         type=['csv', 'xlsx', 'xls'],
         accept_multiple_files=True,
         help="Google FormsやMicrosoft Forms等から出力されたCSV/Excelファイルをアップロードしてください"
@@ -51,7 +48,7 @@ def main():
 
     if not uploaded_files:
         # ファイルがアップロードされていない場合の説明
-        st.info("👈 サイドバーからCSV/Excelファイルをアップロードしてください")
+        st.info("☝ 上記のエリアからCSV/Excelファイルをアップロードしてください")
 
         st.markdown("""
         ### 使い方
@@ -95,15 +92,15 @@ def main():
         # 科目カラムを検出
         subject_col = detect_subject_column(combined_df)
 
-        # サイドバー: 科目選択フィルタ
-        st.sidebar.markdown("---")
-        st.sidebar.header("🔍 フィルタ設定")
+        # 科目選択フィルタ
+        st.markdown("---")
+        st.header("🔍 フィルタ設定")
 
         if subject_col and subject_col in combined_df.columns:
             subjects = combined_df[subject_col].unique().tolist()
             subjects_sorted = sorted([str(s) for s in subjects if pd.notna(s)])
 
-            selected_subject = st.sidebar.selectbox(
+            selected_subject = st.selectbox(
                 "分析する科目を選択",
                 ["全体"] + subjects_sorted,
                 help="特定の科目のみを分析する場合は選択してください"
@@ -115,7 +112,7 @@ def main():
             else:
                 filtered_df = combined_df[combined_df[subject_col] == selected_subject]
         else:
-            st.sidebar.warning("⚠️ 科目名カラムが検出されませんでした")
+            st.warning("⚠️ 科目名カラムが検出されませんでした")
             filtered_df = combined_df
             selected_subject = "全体"
 
@@ -304,6 +301,19 @@ def main():
             if download_format == "テンプレートを使用":
                 st.info("📄 テンプレート.xlsxに全教科のデータを書き込みます")
 
+                # テンプレートのプレースホルダー入力
+                st.markdown("### 📝 テンプレート情報の入力")
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    year = st.text_input("年度 (令和{Y}年度)", value="6", help="令和の年号を入力してください（例：6）")
+                with col2:
+                    survey_number = st.text_input("回数 (第{n}回)", value="1", help="アンケートの実施回数を入力してください（例：1）")
+                with col3:
+                    month = st.text_input("月 ({MM}月)", value="12", help="実施月を入力してください（例：12）")
+
+                st.markdown("---")
+
                 # 科目と教科のマッピング設定
                 st.markdown("### 📋 教科と科目のマッピング設定")
                 st.markdown("各教科にどの科目を含めるか選択してください。")
@@ -365,8 +375,25 @@ def main():
                     # ダウンロードボタン
                     if st.button("📥 テンプレート形式でダウンロード", type="primary"):
                         try:
+                            # プレースホルダーの値を辞書にまとめる
+                            placeholders = {
+                                'Y': year,
+                                'n': survey_number,
+                                'MM': month
+                            }
+
+                            # デバッグ情報を表示
+                            st.write("🔍 デバッグ情報:")
+                            st.write(f"- 科目マッピング: {subject_mapping}")
+                            st.write(f"- プレースホルダー: {placeholders}")
+
                             # テンプレートを使用してExcelファイルを生成
-                            output = write_to_template(combined_df, question_cols, subject_mapping=subject_mapping)
+                            output = write_to_template(
+                                combined_df,
+                                question_cols,
+                                subject_mapping=subject_mapping,
+                                placeholders=placeholders
+                            )
 
                             # ダウンロード用のリンクを生成
                             st.download_button(
