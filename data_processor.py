@@ -490,6 +490,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     # 質問項目のマッピングを作成
     # アップロードされたデータの質問項目とテンプレートの質問項目を照合
     question_mapping = {}  # {テンプレート列番号: データの質問項目インデックス}
+    match_details = {}  # マッチング詳細情報 {テンプレート列番号: (マッチタイプ, データ質問文)}
 
     for template_col_idx, template_question in template_questions:
         matched = False
@@ -498,6 +499,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         for data_idx, data_question in enumerate(question_cols):
             if data_question == template_question:
                 question_mapping[template_col_idx] = data_idx
+                match_details[template_col_idx] = ("完全一致", data_question)
                 matched = True
                 break
 
@@ -507,24 +509,48 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                 # テンプレート質問がデータ質問に含まれているか
                 if template_question in data_question:
                     question_mapping[template_col_idx] = data_idx
+                    match_details[template_col_idx] = ("部分一致（テンプレート⊂データ）", data_question)
                     matched = True
                     break
                 # データ質問がテンプレート質問に含まれているか
                 elif data_question in template_question:
                     question_mapping[template_col_idx] = data_idx
+                    match_details[template_col_idx] = ("部分一致（データ⊂テンプレート）", data_question)
                     matched = True
                     break
 
     print(f"  - マッピングされた質問項目: {len(question_mapping)}個 / {len(template_questions)}個")
 
+    # マッチングタイプ別の統計
+    exact_matches = sum(1 for match_type, _ in match_details.values() if match_type == "完全一致")
+    partial_matches = len(match_details) - exact_matches
+    print(f"    - 完全一致: {exact_matches}個")
+    print(f"    - 部分一致: {partial_matches}個")
+
     # マッピングされなかった質問項目を警告
-    unmapped_template = [q for col_idx, q in template_questions if col_idx not in question_mapping]
+    unmapped_template = [(col_idx, q) for col_idx, q in template_questions if col_idx not in question_mapping]
     if unmapped_template:
-        print(f"  ⚠️ 警告: 以下のテンプレート質問項目にデータが見つかりませんでした:")
-        for q in unmapped_template[:5]:  # 最初の5個のみ表示
-            print(f"    - {q}")
-        if len(unmapped_template) > 5:
-            print(f"    ... 他{len(unmapped_template) - 5}個")
+        print(f"\n  ⚠️ 以下のテンプレート質問項目にデータが見つかりませんでした ({len(unmapped_template)}個):")
+        for col_idx, q in unmapped_template[:10]:  # 最初の10個まで表示
+            print(f"    [{col_idx}] {q}")
+        if len(unmapped_template) > 10:
+            print(f"    ... 他{len(unmapped_template) - 10}個")
+
+    # 部分一致した質問項目の詳細表示
+    if partial_matches > 0:
+        print(f"\n  📋 部分一致の詳細 ({partial_matches}個):")
+        count = 0
+        for col_idx, (match_type, data_question) in match_details.items():
+            if match_type != "完全一致":
+                template_q = next(q for c, q in template_questions if c == col_idx)
+                print(f"    [{col_idx}] {match_type}")
+                print(f"        テンプレート: {template_q}")
+                print(f"        データ      : {data_question}")
+                count += 1
+                if count >= 5:  # 最初の5個まで表示
+                    if partial_matches > 5:
+                        print(f"    ... 他{partial_matches - 5}個")
+                    break
 
     # 全体データを書き込み（7行目）
     row_idx = subject_row_mapping['全体']
