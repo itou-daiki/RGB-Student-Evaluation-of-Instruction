@@ -429,6 +429,15 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     wb = openpyxl.load_workbook(template_path)
     ws = wb['概要']
 
+    # テンプレートの6行目から質問項目の名前を読み込む（C列からAF列まで）
+    template_questions = []
+    for col_idx in range(3, 33):  # C列（3）からAF列（32）まで
+        cell = ws.cell(row=6, column=col_idx)
+        if cell.value:
+            template_questions.append((col_idx, str(cell.value)))
+
+    print(f"🔍 テンプレートの質問項目: {len(template_questions)}個")
+
     # プレースホルダーを置換する関数
     def replace_placeholders(text):
         if placeholders and text:
@@ -478,13 +487,52 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         print(f"  ⚠️ 警告: 質問項目が30個を超えています。余分な項目:")
         print(f"    {question_cols[30:]}")
 
-    # 全体データを書き込み（7行目、C列から開始）
-    # テンプレートは30個の質問項目まで対応（C列からAF列まで）
-    row_idx = subject_row_mapping['全体']
-    avg_values = overall_stats['平均値'].tolist()[:30]  # 最初の30個のみ
+    # 質問項目のマッピングを作成
+    # アップロードされたデータの質問項目とテンプレートの質問項目を照合
+    question_mapping = {}  # {テンプレート列番号: データの質問項目インデックス}
 
-    for col_idx, avg in enumerate(avg_values, start=3):  # C列=3
-        ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
+    for template_col_idx, template_question in template_questions:
+        matched = False
+
+        # まず完全一致を探す
+        for data_idx, data_question in enumerate(question_cols):
+            if data_question == template_question:
+                question_mapping[template_col_idx] = data_idx
+                matched = True
+                break
+
+        # 完全一致がない場合、部分一致を試す
+        if not matched:
+            for data_idx, data_question in enumerate(question_cols):
+                # テンプレート質問がデータ質問に含まれているか
+                if template_question in data_question:
+                    question_mapping[template_col_idx] = data_idx
+                    matched = True
+                    break
+                # データ質問がテンプレート質問に含まれているか
+                elif data_question in template_question:
+                    question_mapping[template_col_idx] = data_idx
+                    matched = True
+                    break
+
+    print(f"  - マッピングされた質問項目: {len(question_mapping)}個 / {len(template_questions)}個")
+
+    # マッピングされなかった質問項目を警告
+    unmapped_template = [q for col_idx, q in template_questions if col_idx not in question_mapping]
+    if unmapped_template:
+        print(f"  ⚠️ 警告: 以下のテンプレート質問項目にデータが見つかりませんでした:")
+        for q in unmapped_template[:5]:  # 最初の5個のみ表示
+            print(f"    - {q}")
+        if len(unmapped_template) > 5:
+            print(f"    ... 他{len(unmapped_template) - 5}個")
+
+    # 全体データを書き込み（7行目）
+    row_idx = subject_row_mapping['全体']
+    avg_values = overall_stats['平均値'].tolist()
+
+    for template_col_idx, data_idx in question_mapping.items():
+        if data_idx < len(avg_values):
+            ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
 
     # 各教科のデータを処理して書き込む
     if subject_col and subject_col in df.columns:
@@ -508,11 +556,11 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     # 統計を計算
                     subject_stats = calculate_statistics(subject_df, question_cols)
 
-                    # データを書き込み（C列から開始）
-                    # テンプレートは30個の質問項目まで対応
-                    avg_values = subject_stats['平均値'].tolist()[:30]
-                    for col_idx, avg in enumerate(avg_values, start=3):
-                        ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
+                    # データを書き込み（質問項目のマッピングを使用）
+                    avg_values = subject_stats['平均値'].tolist()
+                    for template_col_idx, data_idx in question_mapping.items():
+                        if data_idx < len(avg_values):
+                            ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
         else:
             # デフォルトの自動マッピング（後方互換性のため）
             # 教科名の部分一致用キーワード
@@ -567,11 +615,11 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     # 統計を計算
                     subject_stats = calculate_statistics(subject_df, question_cols)
 
-                    # データを書き込み（C列から開始）
-                    # テンプレートは30個の質問項目まで対応
-                    avg_values = subject_stats['平均値'].tolist()[:30]
-                    for col_idx, avg in enumerate(avg_values, start=3):
-                        ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
+                    # データを書き込み（質問項目のマッピングを使用）
+                    avg_values = subject_stats['平均値'].tolist()
+                    for template_col_idx, data_idx in question_mapping.items():
+                        if data_idx < len(avg_values):
+                            ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
 
     # BytesIOに書き込み
     output = io.BytesIO()
