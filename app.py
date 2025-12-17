@@ -346,11 +346,22 @@ def main():
                     col1, col2 = st.columns(2)
 
                     for idx, template_subject in enumerate(template_subjects):
+                        # すでに他の教科で選択されている科目を収集
+                        already_selected = set()
+                        for other_subject in template_subjects[:idx]:
+                            # session_stateから以前選択された値を取得
+                            key = f"subject_mapping_{other_subject}"
+                            if key in st.session_state:
+                                already_selected.update(st.session_state[key])
+
+                        # この教科で利用可能な科目（他で選択されていないもの）
+                        available_for_this = [s for s in available_subjects if s not in already_selected]
+
                         # 初期選択の推奨値を計算
                         default_selected = []
                         keywords = default_keywords.get(template_subject, [])
 
-                        for subject in available_subjects:
+                        for subject in available_for_this:
                             # 完全一致または部分一致をチェック
                             if subject == template_subject:
                                 default_selected.append(subject)
@@ -364,9 +375,10 @@ def main():
                         with col1 if idx % 2 == 0 else col2:
                             selected = st.multiselect(
                                 f"**{template_subject}**",
-                                options=available_subjects,
+                                options=available_for_this,
                                 default=default_selected,
-                                key=f"subject_mapping_{template_subject}"
+                                key=f"subject_mapping_{template_subject}",
+                                help=f"選択可能な科目: {len(available_for_this)}個"
                             )
                             subject_mapping[template_subject] = selected
 
