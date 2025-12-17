@@ -382,18 +382,61 @@ def main():
                                 'MM': month
                             }
 
-                            # デバッグ情報を表示
-                            st.write("🔍 デバッグ情報:")
-                            st.write(f"- 科目マッピング: {subject_mapping}")
-                            st.write(f"- プレースホルダー: {placeholders}")
-
                             # テンプレートを使用してExcelファイルを生成
-                            output = write_to_template(
+                            output, match_info = write_to_template(
                                 combined_df,
                                 question_cols,
                                 subject_mapping=subject_mapping,
                                 placeholders=placeholders
                             )
+
+                            # マッチング情報を表示
+                            st.markdown("---")
+                            st.subheader("📊 質問項目のマッピング結果")
+
+                            # サマリー情報
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("テンプレート質問項目", f"{match_info['template_question_count']}個")
+                            with col2:
+                                st.metric("データ質問項目", f"{match_info['data_question_count']}個")
+                            with col3:
+                                st.metric("マッピング成功", f"{match_info['total_matches']}個")
+
+                            # マッチングタイプの内訳
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.info(f"✅ **完全一致**: {match_info['exact_matches']}個")
+                            with col2:
+                                st.info(f"🔄 **部分一致**: {match_info['partial_matches']}個")
+
+                            # 余分な質問項目の警告
+                            if match_info['excess_questions']:
+                                with st.expander(f"⚠️ 質問項目が30個を超えています（余分な{len(match_info['excess_questions'])}個は無視されます）"):
+                                    for q in match_info['excess_questions']:
+                                        st.write(f"- {q}")
+
+                            # マッピングされなかった質問項目
+                            if match_info['unmapped_questions']:
+                                with st.expander(f"⚠️ マッピングされなかった質問項目 ({len(match_info['unmapped_questions'])}個)", expanded=True):
+                                    st.warning("以下のテンプレート質問項目にデータが見つかりませんでした:")
+                                    for col_idx, q in match_info['unmapped_questions'][:10]:
+                                        st.write(f"**[列{col_idx}]** {q}")
+                                    if len(match_info['unmapped_questions']) > 10:
+                                        st.write(f"... 他{len(match_info['unmapped_questions']) - 10}個")
+
+                            # 部分一致の詳細
+                            if match_info['partial_match_details']:
+                                with st.expander(f"📋 部分一致の詳細 ({len(match_info['partial_match_details'])}個)"):
+                                    for detail in match_info['partial_match_details'][:5]:
+                                        st.markdown(f"**[列{detail['column']}]** {detail['match_type']}")
+                                        st.write(f"- テンプレート: `{detail['template_question']}`")
+                                        st.write(f"- データ: `{detail['data_question']}`")
+                                        st.markdown("---")
+                                    if len(match_info['partial_match_details']) > 5:
+                                        st.write(f"... 他{len(match_info['partial_match_details']) - 5}個")
+
+                            st.markdown("---")
 
                             # ダウンロード用のリンクを生成
                             st.download_button(

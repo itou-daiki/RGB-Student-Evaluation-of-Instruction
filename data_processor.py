@@ -407,7 +407,7 @@ def create_download_data(stats_df: pd.DataFrame, overall_avg: float,
 def write_to_template(df: pd.DataFrame, question_cols: List[str],
                      subject_mapping: Optional[Dict[str, List[str]]] = None,
                      placeholders: Optional[Dict[str, str]] = None,
-                     template_path: str = "テンプレート.xlsx") -> io.BytesIO:
+                     template_path: str = "テンプレート.xlsx") -> Tuple[io.BytesIO, Dict]:
     """
     テンプレートExcelファイルに各教科のデータを書き込む
 
@@ -419,7 +419,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         template_path: テンプレートファイルのパス
 
     Returns:
-        BytesIO: 書き込み済みExcelファイル
+        Tuple[BytesIO, Dict]: (書き込み済みExcelファイル, マッチング情報)
     """
     import openpyxl
     from openpyxl.utils import get_column_letter
@@ -436,7 +436,11 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         if cell.value:
             template_questions.append((col_idx, str(cell.value)))
 
-    print(f"🔍 テンプレートの質問項目: {len(template_questions)}個")
+    # マッチング情報を格納する辞書
+    match_info = {
+        'template_question_count': len(template_questions),
+        'data_question_count': len(question_cols),
+    }
 
     # プレースホルダーを置換する関数
     def replace_placeholders(text):
@@ -478,14 +482,8 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     # 全体の統計を計算
     overall_stats = calculate_statistics(df, question_cols)
 
-    # デバッグ: 質問項目数と統計データの確認
-    print(f"🔍 デバッグ情報 (write_to_template):")
-    print(f"  - 質問項目数: {len(question_cols)}")
-    print(f"  - 統計データの行数: {len(overall_stats)}")
-    print(f"  - 質問項目リスト (最初の5個): {question_cols[:5]}")
-    if len(question_cols) > 30:
-        print(f"  ⚠️ 警告: 質問項目が30個を超えています。余分な項目:")
-        print(f"    {question_cols[30:]}")
+    # 質問項目数の警告
+    match_info['excess_questions'] = question_cols[30:] if len(question_cols) > 30 else []
 
     # 質問項目のマッピングを作成
     # アップロードされたデータの質問項目とテンプレートの質問項目を照合
@@ -519,38 +517,31 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     matched = True
                     break
 
-    print(f"  - マッピングされた質問項目: {len(question_mapping)}個 / {len(template_questions)}個")
-
     # マッチングタイプ別の統計
     exact_matches = sum(1 for match_type, _ in match_details.values() if match_type == "完全一致")
     partial_matches = len(match_details) - exact_matches
-    print(f"    - 完全一致: {exact_matches}個")
-    print(f"    - 部分一致: {partial_matches}個")
 
-    # マッピングされなかった質問項目を警告
+    # マッチング情報を格納
+    match_info['total_matches'] = len(question_mapping)
+    match_info['exact_matches'] = exact_matches
+    match_info['partial_matches'] = partial_matches
+
+    # マッピングされなかった質問項目
     unmapped_template = [(col_idx, q) for col_idx, q in template_questions if col_idx not in question_mapping]
-    if unmapped_template:
-        print(f"\n  ⚠️ 以下のテンプレート質問項目にデータが見つかりませんでした ({len(unmapped_template)}個):")
-        for col_idx, q in unmapped_template[:10]:  # 最初の10個まで表示
-            print(f"    [{col_idx}] {q}")
-        if len(unmapped_template) > 10:
-            print(f"    ... 他{len(unmapped_template) - 10}個")
+    match_info['unmapped_questions'] = unmapped_template
 
-    # 部分一致した質問項目の詳細表示
-    if partial_matches > 0:
-        print(f"\n  📋 部分一致の詳細 ({partial_matches}個):")
-        count = 0
-        for col_idx, (match_type, data_question) in match_details.items():
-            if match_type != "完全一致":
-                template_q = next(q for c, q in template_questions if c == col_idx)
-                print(f"    [{col_idx}] {match_type}")
-                print(f"        テンプレート: {template_q}")
-                print(f"        データ      : {data_question}")
-                count += 1
-                if count >= 5:  # 最初の5個まで表示
-                    if partial_matches > 5:
-                        print(f"    ... 他{partial_matches - 5}個")
-                    break
+    # 部分一致した質問項目の詳細
+    partial_match_details = []
+    for col_idx, (match_type, data_question) in match_details.items():
+        if match_type != "完全一致":
+            template_q = next(q for c, q in template_questions if c == col_idx)
+            partial_match_details.append({
+                'column': col_idx,
+                'match_type': match_type,
+                'template_question': template_q,
+                'data_question': data_question
+            })
+    match_info['partial_match_details'] = partial_match_details
 
     # 全体データを書き込み（7行目）
     row_idx = subject_row_mapping['全体']
@@ -652,4 +643,4 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     wb.save(output)
     output.seek(0)
 
-    return output
+    return output, match_info
