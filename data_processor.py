@@ -429,6 +429,15 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     wb = openpyxl.load_workbook(template_path)
     ws = wb['概要']
 
+    # テンプレートの6行目から質問項目の名前を読み込む（C列からAF列まで）
+    template_questions = []
+    for col_idx in range(3, 33):  # C列（3）からAF列（32）まで
+        cell = ws.cell(row=6, column=col_idx)
+        if cell.value:
+            template_questions.append((col_idx, str(cell.value)))
+
+    print(f"🔍 テンプレートの質問項目: {len(template_questions)}個")
+
     # プレースホルダーを置換する関数
     def replace_placeholders(text):
         if placeholders and text:
@@ -469,10 +478,87 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     # 全体の統計を計算
     overall_stats = calculate_statistics(df, question_cols)
 
-    # 全体データを書き込み（7行目、C列から開始）
+    # デバッグ: 質問項目数と統計データの確認
+    print(f"🔍 デバッグ情報 (write_to_template):")
+    print(f"  - 質問項目数: {len(question_cols)}")
+    print(f"  - 統計データの行数: {len(overall_stats)}")
+    print(f"  - 質問項目リスト (最初の5個): {question_cols[:5]}")
+    if len(question_cols) > 30:
+        print(f"  ⚠️ 警告: 質問項目が30個を超えています。余分な項目:")
+        print(f"    {question_cols[30:]}")
+
+    # 質問項目のマッピングを作成
+    # アップロードされたデータの質問項目とテンプレートの質問項目を照合
+    question_mapping = {}  # {テンプレート列番号: データの質問項目インデックス}
+    match_details = {}  # マッチング詳細情報 {テンプレート列番号: (マッチタイプ, データ質問文)}
+
+    for template_col_idx, template_question in template_questions:
+        matched = False
+
+        # まず完全一致を探す
+        for data_idx, data_question in enumerate(question_cols):
+            if data_question == template_question:
+                question_mapping[template_col_idx] = data_idx
+                match_details[template_col_idx] = ("完全一致", data_question)
+                matched = True
+                break
+
+        # 完全一致がない場合、部分一致を試す
+        if not matched:
+            for data_idx, data_question in enumerate(question_cols):
+                # テンプレート質問がデータ質問に含まれているか
+                if template_question in data_question:
+                    question_mapping[template_col_idx] = data_idx
+                    match_details[template_col_idx] = ("部分一致（テンプレート⊂データ）", data_question)
+                    matched = True
+                    break
+                # データ質問がテンプレート質問に含まれているか
+                elif data_question in template_question:
+                    question_mapping[template_col_idx] = data_idx
+                    match_details[template_col_idx] = ("部分一致（データ⊂テンプレート）", data_question)
+                    matched = True
+                    break
+
+    print(f"  - マッピングされた質問項目: {len(question_mapping)}個 / {len(template_questions)}個")
+
+    # マッチングタイプ別の統計
+    exact_matches = sum(1 for match_type, _ in match_details.values() if match_type == "完全一致")
+    partial_matches = len(match_details) - exact_matches
+    print(f"    - 完全一致: {exact_matches}個")
+    print(f"    - 部分一致: {partial_matches}個")
+
+    # マッピングされなかった質問項目を警告
+    unmapped_template = [(col_idx, q) for col_idx, q in template_questions if col_idx not in question_mapping]
+    if unmapped_template:
+        print(f"\n  ⚠️ 以下のテンプレート質問項目にデータが見つかりませんでした ({len(unmapped_template)}個):")
+        for col_idx, q in unmapped_template[:10]:  # 最初の10個まで表示
+            print(f"    [{col_idx}] {q}")
+        if len(unmapped_template) > 10:
+            print(f"    ... 他{len(unmapped_template) - 10}個")
+
+    # 部分一致した質問項目の詳細表示
+    if partial_matches > 0:
+        print(f"\n  📋 部分一致の詳細 ({partial_matches}個):")
+        count = 0
+        for col_idx, (match_type, data_question) in match_details.items():
+            if match_type != "完全一致":
+                template_q = next(q for c, q in template_questions if c == col_idx)
+                print(f"    [{col_idx}] {match_type}")
+                print(f"        テンプレート: {template_q}")
+                print(f"        データ      : {data_question}")
+                count += 1
+                if count >= 5:  # 最初の5個まで表示
+                    if partial_matches > 5:
+                        print(f"    ... 他{partial_matches - 5}個")
+                    break
+
+    # 全体データを書き込み（7行目）
     row_idx = subject_row_mapping['全体']
-    for col_idx, avg in enumerate(overall_stats['平均値'].tolist(), start=3):  # C列=3
-        ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
+    avg_values = overall_stats['平均値'].tolist()
+
+    for template_col_idx, data_idx in question_mapping.items():
+        if data_idx < len(avg_values):
+            ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
 
     # 各教科のデータを処理して書き込む
     if subject_col and subject_col in df.columns:
@@ -496,9 +582,11 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     # 統計を計算
                     subject_stats = calculate_statistics(subject_df, question_cols)
 
-                    # データを書き込み（C列から開始）
-                    for col_idx, avg in enumerate(subject_stats['平均値'].tolist(), start=3):
-                        ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
+                    # データを書き込み（質問項目のマッピングを使用）
+                    avg_values = subject_stats['平均値'].tolist()
+                    for template_col_idx, data_idx in question_mapping.items():
+                        if data_idx < len(avg_values):
+                            ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
         else:
             # デフォルトの自動マッピング（後方互換性のため）
             # 教科名の部分一致用キーワード
@@ -553,9 +641,11 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     # 統計を計算
                     subject_stats = calculate_statistics(subject_df, question_cols)
 
-                    # データを書き込み（C列から開始）
-                    for col_idx, avg in enumerate(subject_stats['平均値'].tolist(), start=3):
-                        ws.cell(row=row_idx, column=col_idx, value=round(avg, 2))
+                    # データを書き込み（質問項目のマッピングを使用）
+                    avg_values = subject_stats['平均値'].tolist()
+                    for template_col_idx, data_idx in question_mapping.items():
+                        if data_idx < len(avg_values):
+                            ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
 
     # BytesIOに書き込み
     output = io.BytesIO()
