@@ -680,6 +680,29 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                 if col_letter in ws.column_dimensions:
                     ws_subject.column_dimensions[col_letter].width = ws.column_dimensions[col_letter].width
 
+            # 行の高さをコピー（1-6行目）
+            for row_idx in range(1, 7):
+                if row_idx in ws.row_dimensions:
+                    if ws.row_dimensions[row_idx].height:
+                        ws_subject.row_dimensions[row_idx].height = ws.row_dimensions[row_idx].height
+
+            # 結合セルをコピー（1-6行目に含まれるもの）
+            for merged_cell_range in ws.merged_cells.ranges:
+                # 結合セルの範囲を取得
+                min_row = merged_cell_range.min_row
+                max_row = merged_cell_range.max_row
+                min_col = merged_cell_range.min_col
+                max_col = merged_cell_range.max_col
+
+                # 1-6行目に含まれる結合セルのみコピー
+                if max_row <= 6:
+                    ws_subject.merge_cells(
+                        start_row=min_row,
+                        start_column=min_col,
+                        end_row=max_row,
+                        end_column=max_col
+                    )
+
             # プレースホルダーを置換（1-2行目）
             for row_idx in [1, 2]:
                 for col_idx in range(1, ws_subject.max_column + 1):
@@ -687,8 +710,31 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     if cell.value and isinstance(cell.value, str):
                         cell.value = replace_placeholders(cell.value)
 
+            # 7行目以降のデータ行: テンプレートの7行目のフォーマットをコピー
+            template_data_row = 7
+
             # 7行目: 教科全体の統計
             current_row = 7
+
+            # テンプレートの7行目からスタイルをコピー
+            for col_idx in range(1, ws.max_column + 1):
+                source_cell = ws.cell(template_data_row, col_idx)
+                target_cell = ws_subject.cell(current_row, col_idx)
+
+                # スタイルをコピー
+                if source_cell.has_style:
+                    target_cell.font = source_cell.font.copy()
+                    target_cell.border = source_cell.border.copy()
+                    target_cell.fill = source_cell.fill.copy()
+                    target_cell.number_format = source_cell.number_format
+                    target_cell.protection = source_cell.protection.copy()
+                    target_cell.alignment = source_cell.alignment.copy()
+
+            # 行の高さもコピー
+            if template_data_row in ws.row_dimensions:
+                if ws.row_dimensions[template_data_row].height:
+                    ws_subject.row_dimensions[current_row].height = ws.row_dimensions[template_data_row].height
+
             ws_subject.cell(current_row, 2, value=f"{template_subject}全体")
 
             # 教科全体のデータを取得
@@ -706,6 +752,26 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
 
             # 各科目の統計を書き込み
             for subject_name in matched_subjects:
+                # テンプレートの8行目のスタイルをコピー（7行目の次の行）
+                template_style_row = 8
+                for col_idx in range(1, ws.max_column + 1):
+                    source_cell = ws.cell(template_style_row, col_idx)
+                    target_cell = ws_subject.cell(current_row, col_idx)
+
+                    # スタイルをコピー
+                    if source_cell.has_style:
+                        target_cell.font = source_cell.font.copy()
+                        target_cell.border = source_cell.border.copy()
+                        target_cell.fill = source_cell.fill.copy()
+                        target_cell.number_format = source_cell.number_format
+                        target_cell.protection = source_cell.protection.copy()
+                        target_cell.alignment = source_cell.alignment.copy()
+
+                # 行の高さもコピー
+                if template_style_row in ws.row_dimensions:
+                    if ws.row_dimensions[template_style_row].height:
+                        ws_subject.row_dimensions[current_row].height = ws.row_dimensions[template_style_row].height
+
                 ws_subject.cell(current_row, 2, value=subject_name)
 
                 # 科目ごとのデータを取得
