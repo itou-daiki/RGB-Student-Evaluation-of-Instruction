@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
+from datetime import datetime
 from data_processor import (
     load_and_process_csv,
     calculate_statistics,
@@ -19,6 +20,36 @@ from data_processor import (
     detect_subject_column,
     write_to_template,
 )
+
+
+def get_current_reiwa_year():
+    """現在の令和年を計算"""
+    current_year = datetime.now().year
+    reiwa_year = current_year - 2018  # 令和元年 = 2019年
+    return str(reiwa_year)
+
+
+def get_survey_number():
+    """現在の月から実施回数を計算
+    4-7月: 1
+    9-11月: 2
+    12-3月: 3
+    """
+    current_month = datetime.now().month
+
+    if 4 <= current_month <= 7:
+        return "1"
+    elif 9 <= current_month <= 11:
+        return "2"
+    elif current_month == 12 or 1 <= current_month <= 3:
+        return "3"
+    else:  # 8月の場合はデフォルトで1
+        return "1"
+
+
+def get_current_month():
+    """現在の月を取得"""
+    return str(datetime.now().month)
 
 
 # ページ設定
@@ -305,11 +336,11 @@ def main():
 
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    year = st.text_input("📅 年度", value="6", help="令和{Y}年度の{Y}に入る値（例：6）", placeholder="6")
+                    year = st.text_input("📅 年度", value=get_current_reiwa_year(), help="令和{Y}年度の{Y}に入る値（例：7）", placeholder=get_current_reiwa_year())
                 with col2:
-                    survey_number = st.text_input("🔢 実施回数", value="1", help="第{n}回の{n}に入る値（例：1）", placeholder="1")
+                    survey_number = st.text_input("🔢 実施回数", value=get_survey_number(), help="第{n}回の{n}に入る値（4-7月:1, 9-11月:2, 12-3月:3）", placeholder=get_survey_number())
                 with col3:
-                    month = st.text_input("📆 実施月", value="12", help="{MM}月の{MM}に入る値（例：12）", placeholder="12")
+                    month = st.text_input("📆 実施月", value=get_current_month(), help="{MM}月の{MM}に入る値（現在の月）", placeholder=get_current_month())
 
                 st.markdown("---")
 
