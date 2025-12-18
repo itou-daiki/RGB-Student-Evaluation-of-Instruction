@@ -551,8 +551,12 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         if data_idx < len(avg_values):
             ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
 
+    # AG列（列33）に平均値を書き込み
+    overall_avg = np.mean([avg_values[data_idx] for data_idx in question_mapping.values() if data_idx < len(avg_values)])
+    ws.cell(row=row_idx, column=33, value=round(overall_avg, 2))
+
     # AH列（列34）にサンプルサイズ（回答数）を書き込み
-    ws.cell(row=row_idx, column=34, value=len(df))
+    ws.cell(row=row_idx, column=34, value=int(len(df)))
 
     # 各教科のデータを処理して書き込む
     if subject_col and subject_col in df.columns:
@@ -582,8 +586,12 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                         if data_idx < len(avg_values):
                             ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
 
+                    # AG列（列33）に平均値を書き込み
+                    subject_avg = np.mean([avg_values[data_idx] for data_idx in question_mapping.values() if data_idx < len(avg_values)])
+                    ws.cell(row=row_idx, column=33, value=round(subject_avg, 2))
+
                     # AH列（列34）にサンプルサイズ（回答数）を書き込み
-                    ws.cell(row=row_idx, column=34, value=len(subject_df))
+                    ws.cell(row=row_idx, column=34, value=int(len(subject_df)))
         else:
             # デフォルトの自動マッピング（後方互換性のため）
             # 教科名の部分一致用キーワード
@@ -644,8 +652,12 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                         if data_idx < len(avg_values):
                             ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
 
+                    # AG列（列33）に平均値を書き込み
+                    subject_avg = np.mean([avg_values[data_idx] for data_idx in question_mapping.values() if data_idx < len(avg_values)])
+                    ws.cell(row=row_idx, column=33, value=round(subject_avg, 2))
+
                     # AH列（列34）にサンプルサイズ（回答数）を書き込み
-                    ws.cell(row=row_idx, column=34, value=len(subject_df))
+                    ws.cell(row=row_idx, column=34, value=int(len(subject_df)))
 
     # ========================================
     # 各教科の詳細シートを生成
@@ -764,8 +776,12 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     if data_idx < len(avg_values):
                         ws_subject.cell(current_row, template_col_idx, value=round(avg_values[data_idx], 2))
 
+                # AG列（列33）に平均値を書き込み
+                subject_avg = np.mean([avg_values[data_idx] for data_idx in question_mapping.values() if data_idx < len(avg_values)])
+                ws_subject.cell(current_row, 33, value=round(subject_avg, 2))
+
                 # AH列（列34）にサンプルサイズ（回答数）を書き込み
-                ws_subject.cell(current_row, 34, value=len(subject_df))
+                ws_subject.cell(current_row, 34, value=int(len(subject_df)))
 
             current_row += 1
 
@@ -811,8 +827,12 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                         if data_idx < len(avg_values):
                             ws_subject.cell(current_row, template_col_idx, value=round(avg_values[data_idx], 2))
 
+                    # AG列（列33）に平均値を書き込み
+                    subject_only_avg = np.mean([avg_values[data_idx] for data_idx in question_mapping.values() if data_idx < len(avg_values)])
+                    ws_subject.cell(current_row, 33, value=round(subject_only_avg, 2))
+
                     # AH列（列34）にサンプルサイズ（回答数）を書き込み
-                    ws_subject.cell(current_row, 34, value=len(subject_only_df))
+                    ws_subject.cell(current_row, 34, value=int(len(subject_only_df)))
 
                 current_row += 1
 
