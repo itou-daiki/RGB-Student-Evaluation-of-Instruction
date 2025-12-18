@@ -493,6 +493,21 @@ def main():
 
                             st.markdown("---")
 
+                            # 生成されたシートの情報を表示
+                            if match_info.get('created_sheets'):
+                                st.subheader("📑 生成されたシート")
+                                st.success(f"✅ {len(match_info['created_sheets'])}個の教科シートを作成しました")
+
+                                with st.expander("📝 シート詳細を表示", expanded=False):
+                                    for sheet_info in match_info['created_sheets']:
+                                        st.markdown(f"**📄 {sheet_info['sheet_name']}シート**")
+                                        st.write(f"- {sheet_info['sheet_name']}全体")
+                                        for subject in sheet_info['subjects']:
+                                            st.write(f"- {subject}")
+                                        st.markdown("---")
+
+                            st.markdown("---")
+
                             # ダウンロード用のリンクを生成
                             st.download_button(
                                 label="💾 ファイルを保存",

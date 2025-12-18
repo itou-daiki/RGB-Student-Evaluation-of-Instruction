@@ -638,6 +638,92 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                         if data_idx < len(avg_values):
                             ws.cell(row=row_idx, column=template_col_idx, value=round(avg_values[data_idx], 2))
 
+    # ========================================
+    # 各教科の詳細シートを生成
+    # ========================================
+    created_sheets = []
+    if subject_col and subject_col in df.columns and subject_mapping:
+        for template_subject, matched_subjects in subject_mapping.items():
+            # 教科に科目が割り当てられている場合のみシートを作成
+            if not matched_subjects:
+                continue
+
+            # 新しいシートを作成
+            ws_subject = wb.create_sheet(title=template_subject)
+            created_sheets.append({
+                'sheet_name': template_subject,
+                'subject_count': len(matched_subjects),
+                'subjects': matched_subjects
+            })
+
+            # 概要シートの1-6行目（ヘッダー部分）をコピー
+            for row_idx in range(1, 7):
+                for col_idx in range(1, ws.max_column + 1):
+                    source_cell = ws.cell(row_idx, col_idx)
+                    target_cell = ws_subject.cell(row_idx, col_idx)
+
+                    # 値をコピー
+                    target_cell.value = source_cell.value
+
+                    # スタイルをコピー（フォント、塗りつぶし、罫線など）
+                    if source_cell.has_style:
+                        target_cell.font = source_cell.font.copy()
+                        target_cell.border = source_cell.border.copy()
+                        target_cell.fill = source_cell.fill.copy()
+                        target_cell.number_format = source_cell.number_format
+                        target_cell.protection = source_cell.protection.copy()
+                        target_cell.alignment = source_cell.alignment.copy()
+
+            # 列幅をコピー
+            for col_idx in range(1, ws.max_column + 1):
+                col_letter = get_column_letter(col_idx)
+                if col_letter in ws.column_dimensions:
+                    ws_subject.column_dimensions[col_letter].width = ws.column_dimensions[col_letter].width
+
+            # プレースホルダーを置換（1-2行目）
+            for row_idx in [1, 2]:
+                for col_idx in range(1, ws_subject.max_column + 1):
+                    cell = ws_subject.cell(row_idx, col_idx)
+                    if cell.value and isinstance(cell.value, str):
+                        cell.value = replace_placeholders(cell.value)
+
+            # 7行目: 教科全体の統計
+            current_row = 7
+            ws_subject.cell(current_row, 2, value=f"{template_subject}全体")
+
+            # 教科全体のデータを取得
+            subject_df = df[df[subject_col].isin(matched_subjects)]
+            if len(subject_df) > 0:
+                subject_stats = calculate_statistics(subject_df, question_cols)
+                avg_values = subject_stats['平均値'].tolist()
+
+                # 質問項目のマッピングを使用してデータを書き込み
+                for template_col_idx, data_idx in question_mapping.items():
+                    if data_idx < len(avg_values):
+                        ws_subject.cell(current_row, template_col_idx, value=round(avg_values[data_idx], 2))
+
+            current_row += 1
+
+            # 各科目の統計を書き込み
+            for subject_name in matched_subjects:
+                ws_subject.cell(current_row, 2, value=subject_name)
+
+                # 科目ごとのデータを取得
+                subject_only_df = df[df[subject_col] == subject_name]
+                if len(subject_only_df) > 0:
+                    subject_only_stats = calculate_statistics(subject_only_df, question_cols)
+                    avg_values = subject_only_stats['平均値'].tolist()
+
+                    # 質問項目のマッピングを使用してデータを書き込み
+                    for template_col_idx, data_idx in question_mapping.items():
+                        if data_idx < len(avg_values):
+                            ws_subject.cell(current_row, template_col_idx, value=round(avg_values[data_idx], 2))
+
+                current_row += 1
+
+    # 作成したシートの情報をmatch_infoに追加
+    match_info['created_sheets'] = created_sheets
+
     # BytesIOに書き込み
     output = io.BytesIO()
     wb.save(output)
