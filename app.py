@@ -299,24 +299,22 @@ def main():
             )
 
             if download_format == "テンプレートを使用":
-                st.info("📄 テンプレート.xlsxに全教科のデータを書き込みます")
-
-                # テンプレートのプレースホルダー入力
+                # テンプレート情報の入力
                 st.markdown("### 📝 テンプレート情報の入力")
-                col1, col2, col3 = st.columns(3)
+                st.info("💡 テンプレートファイルのプレースホルダー（{Y}、{n}、{MM}）を以下の値で置き換えます")
 
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    year = st.text_input("年度 (令和{Y}年度)", value="6", help="令和の年号を入力してください（例：6）")
+                    year = st.text_input("📅 年度", value="6", help="令和{Y}年度の{Y}に入る値（例：6）", placeholder="6")
                 with col2:
-                    survey_number = st.text_input("回数 (第{n}回)", value="1", help="アンケートの実施回数を入力してください（例：1）")
+                    survey_number = st.text_input("🔢 実施回数", value="1", help="第{n}回の{n}に入る値（例：1）", placeholder="1")
                 with col3:
-                    month = st.text_input("月 ({MM}月)", value="12", help="実施月を入力してください（例：12）")
+                    month = st.text_input("📆 実施月", value="12", help="{MM}月の{MM}に入る値（例：12）", placeholder="12")
 
                 st.markdown("---")
 
                 # 科目と教科のマッピング設定
-                st.markdown("### 📋 教科と科目のマッピング設定")
-                st.markdown("各教科にどの科目を含めるか選択してください。")
+                st.markdown("### 📚 教科と科目のマッピング設定")
 
                 # データに含まれる科目名を取得
                 subject_col = detect_subject_column(combined_df)
@@ -339,20 +337,43 @@ def main():
                         '情報': ['情報', 'じょうほう'],
                     }
 
+                    # 説明文
+                    with st.expander("ℹ️ マッピングについて", expanded=False):
+                        st.markdown("""
+                        **教科と科目の関係について**
+                        - 各教科に対して、含めたい科目を選択してください
+                        - 科目は複数の教科に重複して選択できません
+                        - 自動で推奨される科目が初期選択されています
+                        - 必要に応じて手動で調整してください
+
+                        **例**
+                        - 「数学」教科 → 数学I、数学II、数学A など
+                        - 「理科」教科 → 物理基礎、化学基礎、生物基礎 など
+                        """)
+
+                    # 全体の割り当て状況を表示
+                    total_subjects = len(available_subjects)
+
                     # 教科ごとの科目選択（マルチセレクト）
                     subject_mapping = {}
 
-                    # 2列レイアウト
-                    col1, col2 = st.columns(2)
+                    # すべての教科で既に選択されている科目を収集
+                    def get_all_selected_subjects(exclude_subject=None):
+                        """全教科で選択されている科目を取得（特定の教科を除外）"""
+                        selected = set()
+                        for subj in template_subjects:
+                            if subj != exclude_subject:
+                                key = f"subject_mapping_{subj}"
+                                if key in st.session_state:
+                                    selected.update(st.session_state[key])
+                        return selected
+
+                    # 3列レイアウトで見やすく表示
+                    cols = st.columns(3)
 
                     for idx, template_subject in enumerate(template_subjects):
-                        # すでに他の教科で選択されている科目を収集
-                        already_selected = set()
-                        for other_subject in template_subjects[:idx]:
-                            # session_stateから以前選択された値を取得
-                            key = f"subject_mapping_{other_subject}"
-                            if key in st.session_state:
-                                already_selected.update(st.session_state[key])
+                        # 他の教科で選択されている科目を除外
+                        already_selected = get_all_selected_subjects(exclude_subject=template_subject)
 
                         # この教科で利用可能な科目（他で選択されていないもの）
                         available_for_this = [s for s in available_subjects if s not in already_selected]
@@ -371,16 +392,38 @@ def main():
                                         default_selected.append(subject)
                                         break
 
-                        # 2列に分けて表示
-                        with col1 if idx % 2 == 0 else col2:
+                        # 3列に分けて表示
+                        with cols[idx % 3]:
                             selected = st.multiselect(
                                 f"**{template_subject}**",
                                 options=available_for_this,
                                 default=default_selected,
                                 key=f"subject_mapping_{template_subject}",
-                                help=f"選択可能な科目: {len(available_for_this)}個"
+                                help=f"この教科に含める科目を選択してください"
                             )
                             subject_mapping[template_subject] = selected
+
+                            # 選択された科目数を表示
+                            if selected:
+                                st.caption(f"✓ {len(selected)}科目選択中")
+                            else:
+                                st.caption("未選択")
+
+                    # 割り当て状況のサマリー
+                    st.markdown("---")
+                    total_assigned = sum(len(subjects) for subjects in subject_mapping.values())
+                    unassigned = total_subjects - total_assigned
+
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("📊 総科目数", total_subjects)
+                    with col2:
+                        st.metric("✅ 割り当て済み", total_assigned)
+                    with col3:
+                        st.metric("⚪ 未割り当て", unassigned)
+
+                    if unassigned > 0:
+                        st.info(f"💡 {unassigned}個の科目がまだ教科に割り当てられていません")
 
                     st.markdown("---")
 
