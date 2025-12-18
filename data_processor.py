@@ -735,7 +735,14 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                 if ws.row_dimensions[template_data_row].height:
                     ws_subject.row_dimensions[current_row].height = ws.row_dimensions[template_data_row].height
 
-            ws_subject.cell(current_row, 2, value=f"{template_subject}全体")
+            # A列に教科全体の名前を設定
+            ws_subject.cell(current_row, 1, value=f"{template_subject}全体")
+
+            # B列に「R{Y} 第{n}回」を設定（プレースホルダー置換済み）
+            template_b_value = ws.cell(template_data_row, 2).value
+            if template_b_value:
+                replaced_value = replace_placeholders(str(template_b_value))
+                ws_subject.cell(current_row, 2, value=replaced_value)
 
             # 教科全体のデータを取得
             subject_df = df[df[subject_col].isin(matched_subjects)]
@@ -772,7 +779,14 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     if ws.row_dimensions[template_style_row].height:
                         ws_subject.row_dimensions[current_row].height = ws.row_dimensions[template_style_row].height
 
-                ws_subject.cell(current_row, 2, value=subject_name)
+                # A列に科目名を設定
+                ws_subject.cell(current_row, 1, value=subject_name)
+
+                # B列に「R{Y} 第{n}回」を設定（プレースホルダー置換済み）
+                template_b_value = ws.cell(template_style_row, 2).value
+                if template_b_value:
+                    replaced_value = replace_placeholders(str(template_b_value))
+                    ws_subject.cell(current_row, 2, value=replaced_value)
 
                 # 科目ごとのデータを取得
                 subject_only_df = df[df[subject_col] == subject_name]
