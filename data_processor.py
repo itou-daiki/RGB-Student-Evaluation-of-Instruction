@@ -473,7 +473,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         '保健体育': 13,
         '芸術': 14,
         '家庭': 15,
-        '情報': 16,
+        'SS': 16,
     }
 
     # 科目カラムを検出
