@@ -456,8 +456,8 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
             if cell.value and isinstance(cell.value, str):
                 cell.value = replace_placeholders(cell.value)
 
-    # 7行目から17行目のB列（質問項目列）のプレースホルダーを置換
-    for row_idx in range(7, 18):
+    # 7行目から16行目のB列（質問項目列）のプレースホルダーを置換
+    for row_idx in range(7, 17):
         cell = ws.cell(row=row_idx, column=2)  # B列
         if cell.value and isinstance(cell.value, str):
             cell.value = replace_placeholders(cell.value)
@@ -473,8 +473,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         '保健体育': 13,
         '芸術': 14,
         '家庭': 15,
-        '情報': 16,
-        'SS': 17,
+        'SS': 16,
     }
 
     # 科目カラムを検出
@@ -597,8 +596,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                 '保健体育': ['保健', '体育', 'たいいく'],
                 '芸術': ['音楽', '美術', '書道', '芸術'],
                 '家庭': ['家庭', 'かてい'],
-                '情報': ['情報', 'じょうほう'],
-                'SS': ['SS', '総合', 'そうごう', '探究', '総合的な探究', '総合的な学習'],
+                'SS': ['SS', '総合', 'そうごう', '探究', '総合的な探究', '総合的な学習', '情報', 'じょうほう'],
             }
 
             # データに含まれる教科名を取得
