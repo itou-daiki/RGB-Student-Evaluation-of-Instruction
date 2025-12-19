@@ -19,6 +19,7 @@ from data_processor import (
     create_download_data,
     detect_subject_column,
     write_to_template,
+    create_integrated_excel,
 )
 
 
@@ -325,8 +326,8 @@ def main():
             # ダウンロード形式の選択
             download_format = st.radio(
                 "ダウンロード形式を選択してください",
-                ["テンプレートを使用", "標準形式"],
-                help="テンプレートを使用する場合、全教科のデータがテンプレートに書き込まれます"
+                ["統合形式（全データ）", "テンプレートを使用", "科目別形式"],
+                help="統合形式：全体シート + 各教科シートを含むExcelファイル / テンプレート：既存テンプレートに書き込み / 科目別：選択した科目のみ"
             )
 
             if download_format == "テンプレートを使用":
@@ -554,7 +555,74 @@ def main():
                 else:
                     st.warning("⚠️ 科目名カラムが検出されませんでした。テンプレート形式でのダウンロードができません。")
 
-            else:
+            elif download_format == "統合形式（全データ）":
+                st.info("📊 全体シートと各教科シートを含む統合Excelファイルをダウンロードします")
+
+                # ダウンロードボタン
+                if st.button("📥 統合形式でダウンロード", type="primary"):
+                    try:
+                        # 統合Excelファイルを生成
+                        output = create_integrated_excel(combined_df, question_cols)
+
+                        # ダウンロードボタン
+                        st.download_button(
+                            label="💾 ファイルを保存",
+                            data=output,
+                            file_name="survey_analysis_integrated.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
+
+                        st.success("✅ ダウンロードボタンをクリックしてファイルを保存してください")
+
+                        # 生成されたシートの情報を表示
+                        st.markdown("---")
+                        st.subheader("📑 生成されたシート")
+                        st.info("✅ 全体シート")
+
+                        # 各教科シートの情報を表示
+                        if subject_col and subject_col in combined_df.columns:
+                            unique_subjects = sorted([str(s) for s in combined_df[subject_col].unique() if pd.notna(s)])
+                            subject_groups = {
+                                '国語': ['国語', 'こくご'],
+                                '数学': ['数学', 'すうがく'],
+                                '地歴公民': ['地理', '歴史', '公民', '地歴', '社会', '倫理', '政経'],
+                                '理科': ['理科', '物理', '化学', '生物', '地学'],
+                                '外国語': ['英語', '外国語', 'English', '英'],
+                                '保健体育': ['保健', '体育', 'たいいく'],
+                                '芸術': ['音楽', '美術', '書道', '芸術'],
+                                '家庭': ['家庭', 'かてい'],
+                                '情報': ['情報', 'じょうほう', 'Water', 'WS', '探究', 'SSP', 'SS'],
+                            }
+
+                            created_sheets = []
+                            for group_name, keywords in subject_groups.items():
+                                matched_subjects = []
+                                for subject in unique_subjects:
+                                    if subject == group_name:
+                                        matched_subjects.append(subject)
+                                    else:
+                                        for keyword in keywords:
+                                            if keyword in subject:
+                                                matched_subjects.append(subject)
+                                                break
+
+                                if matched_subjects:
+                                    created_sheets.append((group_name, matched_subjects))
+
+                            if created_sheets:
+                                with st.expander("📝 教科シート詳細を表示", expanded=False):
+                                    for group_name, subjects in created_sheets:
+                                        st.markdown(f"**📄 {group_name}シート**")
+                                        st.write(f"- {group_name}全体")
+                                        for subject in subjects:
+                                            st.write(f"- {subject}")
+                                        st.markdown("---")
+
+                    except Exception as e:
+                        st.error(f"❌ 統合Excelファイルの生成中にエラーが発生しました: {str(e)}")
+                        st.exception(e)
+
+            else:  # 科目別形式
                 st.info("📊 選択された科目の集計結果をダウンロードします")
 
                 # ダウンロード用データを作成

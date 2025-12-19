@@ -845,3 +845,254 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
     output.seek(0)
 
     return output, match_info
+
+
+def create_integrated_excel(df: pd.DataFrame, question_cols: List[str]) -> io.BytesIO:
+    """
+    すべてのデータを統合したExcelファイルを生成
+
+    Args:
+        df: 全データを含むデータフレーム
+        question_cols: 質問項目カラムのリスト
+
+    Returns:
+        BytesIO: 生成されたExcelファイル
+    """
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    # 新しいワークブックを作成
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)  # デフォルトシートを削除
+
+    # スタイル定義
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    subheader_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    subheader_font = Font(bold=True, size=10)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    center_alignment = Alignment(horizontal='center', vertical='center')
+
+    # 科目カラムを検出
+    subject_col = detect_subject_column(df)
+
+    # ========================================
+    # 全体シートを作成
+    # ========================================
+    ws_overall = wb.create_sheet(title="全体")
+
+    # ヘッダー行を作成
+    headers = ['質問項目', '平均値', 'サンプルサイズ', '4点', '3点', '2点', '1点']
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws_overall.cell(row=1, column=col_idx, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_alignment
+        cell.border = border
+
+    # 全体の統計を計算
+    overall_stats = calculate_statistics(df, question_cols)
+
+    # データ行を書き込み
+    for row_idx, (_, row) in enumerate(overall_stats.iterrows(), 2):
+        ws_overall.cell(row=row_idx, column=1, value=row['質問項目']).border = border
+        ws_overall.cell(row=row_idx, column=2, value=round(row['平均値'], 2)).border = border
+        ws_overall.cell(row=row_idx, column=3, value=int(row['有効回答数'])).border = border
+        ws_overall.cell(row=row_idx, column=4, value=int(row['4点の回答数'])).border = border
+        ws_overall.cell(row=row_idx, column=5, value=int(row['3点の回答数'])).border = border
+        ws_overall.cell(row=row_idx, column=6, value=int(row['2点の回答数'])).border = border
+        ws_overall.cell(row=row_idx, column=7, value=int(row['1点の回答数'])).border = border
+
+        # 平均値のセルを中央揃え
+        ws_overall.cell(row=row_idx, column=2).alignment = center_alignment
+        ws_overall.cell(row=row_idx, column=3).alignment = center_alignment
+        ws_overall.cell(row=row_idx, column=4).alignment = center_alignment
+        ws_overall.cell(row=row_idx, column=5).alignment = center_alignment
+        ws_overall.cell(row=row_idx, column=6).alignment = center_alignment
+        ws_overall.cell(row=row_idx, column=7).alignment = center_alignment
+
+    # 列幅を調整
+    ws_overall.column_dimensions['A'].width = 50
+    ws_overall.column_dimensions['B'].width = 12
+    ws_overall.column_dimensions['C'].width = 15
+    ws_overall.column_dimensions['D'].width = 10
+    ws_overall.column_dimensions['E'].width = 10
+    ws_overall.column_dimensions['F'].width = 10
+    ws_overall.column_dimensions['G'].width = 10
+
+    # サマリー情報を追加（最下部に）
+    summary_row = len(overall_stats) + 3
+    ws_overall.cell(row=summary_row, column=1, value="全体平均").font = Font(bold=True)
+    overall_avg = np.mean(overall_stats['平均値'])
+    ws_overall.cell(row=summary_row, column=2, value=round(overall_avg, 2)).font = Font(bold=True)
+    ws_overall.cell(row=summary_row, column=3, value=int(len(df))).font = Font(bold=True)
+
+    # ========================================
+    # 各教科のシートを作成
+    # ========================================
+    if subject_col and subject_col in df.columns:
+        # 教科名のグループ化用キーワード
+        subject_groups = {
+            '国語': ['国語', 'こくご'],
+            '数学': ['数学', 'すうがく'],
+            '地歴公民': ['地理', '歴史', '公民', '地歴', '社会', '倫理', '政経'],
+            '理科': ['理科', '物理', '化学', '生物', '地学'],
+            '外国語': ['英語', '外国語', 'English', '英'],
+            '保健体育': ['保健', '体育', 'たいいく'],
+            '芸術': ['音楽', '美術', '書道', '芸術'],
+            '家庭': ['家庭', 'かてい'],
+            '情報': ['情報', 'じょうほう', 'Water', 'WS', '探究', 'SSP', 'SS'],
+        }
+
+        # データに含まれる科目名を取得
+        unique_subjects = sorted([str(s) for s in df[subject_col].unique() if pd.notna(s)])
+
+        # 各教科グループについて処理
+        for group_name, keywords in subject_groups.items():
+            # このグループに属する科目を検索
+            matched_subjects = []
+            for subject in unique_subjects:
+                # 完全一致または部分一致をチェック
+                if subject == group_name:
+                    matched_subjects.append(subject)
+                else:
+                    for keyword in keywords:
+                        if keyword in subject:
+                            matched_subjects.append(subject)
+                            break
+
+            # マッチした科目がない場合はスキップ
+            if not matched_subjects:
+                continue
+
+            # 教科シートを作成
+            ws_subject = wb.create_sheet(title=group_name)
+
+            # ヘッダー行を作成
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws_subject.cell(row=1, column=col_idx, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_alignment
+                cell.border = border
+
+            current_row = 2
+
+            # 教科全体の統計
+            subject_df = df[df[subject_col].isin(matched_subjects)]
+            if len(subject_df) > 0:
+                # サブヘッダー（教科全体）
+                cell = ws_subject.cell(row=current_row, column=1, value=f"{group_name}全体")
+                cell.fill = subheader_fill
+                cell.font = subheader_font
+                cell.border = border
+
+                subject_stats = calculate_statistics(subject_df, question_cols)
+                subject_avg = np.mean(subject_stats['平均値'])
+
+                ws_subject.cell(row=current_row, column=2, value=round(subject_avg, 2)).border = border
+                ws_subject.cell(row=current_row, column=2).fill = subheader_fill
+                ws_subject.cell(row=current_row, column=2).alignment = center_alignment
+
+                ws_subject.cell(row=current_row, column=3, value=int(len(subject_df))).border = border
+                ws_subject.cell(row=current_row, column=3).fill = subheader_fill
+                ws_subject.cell(row=current_row, column=3).alignment = center_alignment
+
+                # 4点〜1点のセルも塗りつぶし
+                for col_idx in range(4, 8):
+                    cell = ws_subject.cell(row=current_row, column=col_idx)
+                    cell.fill = subheader_fill
+                    cell.border = border
+
+                current_row += 1
+
+                # 質問項目ごとの詳細
+                for _, row in subject_stats.iterrows():
+                    ws_subject.cell(row=current_row, column=1, value=row['質問項目']).border = border
+                    ws_subject.cell(row=current_row, column=2, value=round(row['平均値'], 2)).border = border
+                    ws_subject.cell(row=current_row, column=3, value=int(row['有効回答数'])).border = border
+                    ws_subject.cell(row=current_row, column=4, value=int(row['4点の回答数'])).border = border
+                    ws_subject.cell(row=current_row, column=5, value=int(row['3点の回答数'])).border = border
+                    ws_subject.cell(row=current_row, column=6, value=int(row['2点の回答数'])).border = border
+                    ws_subject.cell(row=current_row, column=7, value=int(row['1点の回答数'])).border = border
+
+                    # 中央揃え
+                    for col_idx in range(2, 8):
+                        ws_subject.cell(row=current_row, column=col_idx).alignment = center_alignment
+
+                    current_row += 1
+
+                # 空行
+                current_row += 1
+
+            # 各科目の統計
+            for subject_name in matched_subjects:
+                subject_only_df = df[df[subject_col] == subject_name]
+                if len(subject_only_df) == 0:
+                    continue
+
+                # サブヘッダー（科目名）
+                cell = ws_subject.cell(row=current_row, column=1, value=subject_name)
+                cell.fill = subheader_fill
+                cell.font = subheader_font
+                cell.border = border
+
+                subject_only_stats = calculate_statistics(subject_only_df, question_cols)
+                subject_only_avg = np.mean(subject_only_stats['平均値'])
+
+                ws_subject.cell(row=current_row, column=2, value=round(subject_only_avg, 2)).border = border
+                ws_subject.cell(row=current_row, column=2).fill = subheader_fill
+                ws_subject.cell(row=current_row, column=2).alignment = center_alignment
+
+                ws_subject.cell(row=current_row, column=3, value=int(len(subject_only_df))).border = border
+                ws_subject.cell(row=current_row, column=3).fill = subheader_fill
+                ws_subject.cell(row=current_row, column=3).alignment = center_alignment
+
+                # 4点〜1点のセルも塗りつぶし
+                for col_idx in range(4, 8):
+                    cell = ws_subject.cell(row=current_row, column=col_idx)
+                    cell.fill = subheader_fill
+                    cell.border = border
+
+                current_row += 1
+
+                # 質問項目ごとの詳細
+                for _, row in subject_only_stats.iterrows():
+                    ws_subject.cell(row=current_row, column=1, value=row['質問項目']).border = border
+                    ws_subject.cell(row=current_row, column=2, value=round(row['平均値'], 2)).border = border
+                    ws_subject.cell(row=current_row, column=3, value=int(row['有効回答数'])).border = border
+                    ws_subject.cell(row=current_row, column=4, value=int(row['4点の回答数'])).border = border
+                    ws_subject.cell(row=current_row, column=5, value=int(row['3点の回答数'])).border = border
+                    ws_subject.cell(row=current_row, column=6, value=int(row['2点の回答数'])).border = border
+                    ws_subject.cell(row=current_row, column=7, value=int(row['1点の回答数'])).border = border
+
+                    # 中央揃え
+                    for col_idx in range(2, 8):
+                        ws_subject.cell(row=current_row, column=col_idx).alignment = center_alignment
+
+                    current_row += 1
+
+                # 空行
+                current_row += 1
+
+            # 列幅を調整
+            ws_subject.column_dimensions['A'].width = 50
+            ws_subject.column_dimensions['B'].width = 12
+            ws_subject.column_dimensions['C'].width = 15
+            ws_subject.column_dimensions['D'].width = 10
+            ws_subject.column_dimensions['E'].width = 10
+            ws_subject.column_dimensions['F'].width = 10
+            ws_subject.column_dimensions['G'].width = 10
+
+    # BytesIOに書き込み
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return output
