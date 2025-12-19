@@ -1096,3 +1096,154 @@ def create_integrated_excel(df: pd.DataFrame, question_cols: List[str]) -> io.By
     output.seek(0)
 
     return output
+
+
+def create_integrated_raw_data_excel(df: pd.DataFrame) -> io.BytesIO:
+    """
+    すべての生データを統合したExcelファイルを生成
+
+    Args:
+        df: 全データを含むデータフレーム（生データ）
+
+    Returns:
+        BytesIO: 生成されたExcelファイル
+    """
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.utils.dataframe import dataframe_to_rows
+
+    # 新しいワークブックを作成
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)  # デフォルトシートを削除
+
+    # スタイル定義
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    center_alignment = Alignment(horizontal='center', vertical='center')
+
+    # 科目カラムを検出
+    subject_col = detect_subject_column(df)
+
+    # ========================================
+    # 全体シートを作成（すべての生データ）
+    # ========================================
+    ws_overall = wb.create_sheet(title="全体")
+
+    # データフレームをシートに書き込み
+    for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
+        for c_idx, value in enumerate(row, 1):
+            cell = ws_overall.cell(row=r_idx, column=c_idx, value=value)
+
+            # ヘッダー行のスタイル
+            if r_idx == 1:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_alignment
+                cell.border = border
+            else:
+                cell.border = border
+
+    # 列幅を自動調整
+    for column in ws_overall.columns:
+        max_length = 0
+        column_letter = get_column_letter(column[0].column)
+
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+
+        adjusted_width = min(max_length + 2, 50)  # 最大50文字
+        ws_overall.column_dimensions[column_letter].width = adjusted_width
+
+    # ========================================
+    # 各教科のシートを作成（教科ごとの生データ）
+    # ========================================
+    if subject_col and subject_col in df.columns:
+        # 教科名のグループ化用キーワード
+        subject_groups = {
+            '国語': ['国語', 'こくご'],
+            '数学': ['数学', 'すうがく'],
+            '地歴公民': ['地理', '歴史', '公民', '地歴', '社会', '倫理', '政経'],
+            '理科': ['理科', '物理', '化学', '生物', '地学'],
+            '外国語': ['英語', '外国語', 'English', '英'],
+            '保健体育': ['保健', '体育', 'たいいく'],
+            '芸術': ['音楽', '美術', '書道', '芸術'],
+            '家庭': ['家庭', 'かてい'],
+            '情報': ['情報', 'じょうほう', 'Water', 'WS', '探究', 'SSP', 'SS'],
+        }
+
+        # データに含まれる科目名を取得
+        unique_subjects = sorted([str(s) for s in df[subject_col].unique() if pd.notna(s)])
+
+        # 各教科グループについて処理
+        for group_name, keywords in subject_groups.items():
+            # このグループに属する科目を検索
+            matched_subjects = []
+            for subject in unique_subjects:
+                # 完全一致または部分一致をチェック
+                if subject == group_name:
+                    matched_subjects.append(subject)
+                else:
+                    for keyword in keywords:
+                        if keyword in subject:
+                            matched_subjects.append(subject)
+                            break
+
+            # マッチした科目がない場合はスキップ
+            if not matched_subjects:
+                continue
+
+            # 教科シートを作成
+            ws_subject = wb.create_sheet(title=group_name)
+
+            # 教科に該当するデータをフィルタリング
+            subject_df = df[df[subject_col].isin(matched_subjects)]
+
+            if len(subject_df) == 0:
+                continue
+
+            # データフレームをシートに書き込み
+            for r_idx, row in enumerate(dataframe_to_rows(subject_df, index=False, header=True), 1):
+                for c_idx, value in enumerate(row, 1):
+                    cell = ws_subject.cell(row=r_idx, column=c_idx, value=value)
+
+                    # ヘッダー行のスタイル
+                    if r_idx == 1:
+                        cell.fill = header_fill
+                        cell.font = header_font
+                        cell.alignment = center_alignment
+                        cell.border = border
+                    else:
+                        cell.border = border
+
+            # 列幅を自動調整
+            for column in ws_subject.columns:
+                max_length = 0
+                column_letter = get_column_letter(column[0].column)
+
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+
+                adjusted_width = min(max_length + 2, 50)  # 最大50文字
+                ws_subject.column_dimensions[column_letter].width = adjusted_width
+
+    # BytesIOに書き込み
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return output
