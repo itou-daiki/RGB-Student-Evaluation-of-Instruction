@@ -20,6 +20,7 @@ from data_processor import (
     detect_subject_column,
     write_to_template,
     create_integrated_excel,
+    create_integrated_raw_data_excel,
 )
 
 
@@ -556,19 +557,19 @@ def main():
                     st.warning("⚠️ 科目名カラムが検出されませんでした。テンプレート形式でのダウンロードができません。")
 
             elif download_format == "統合形式（全データ）":
-                st.info("📊 全体シートと各教科シートを含む統合Excelファイルをダウンロードします")
+                st.info("📊 全体シートと各教科シートを含む統合Excelファイル（生データ）をダウンロードします")
 
                 # ダウンロードボタン
                 if st.button("📥 統合形式でダウンロード", type="primary"):
                     try:
-                        # 統合Excelファイルを生成
-                        output = create_integrated_excel(combined_df, question_cols)
+                        # 統合Excelファイル（生データ）を生成
+                        output = create_integrated_raw_data_excel(combined_df)
 
                         # ダウンロードボタン
                         st.download_button(
                             label="💾 ファイルを保存",
                             data=output,
-                            file_name="survey_analysis_integrated.xlsx",
+                            file_name="survey_raw_data_integrated.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
 
