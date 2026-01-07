@@ -947,7 +947,7 @@ def create_integrated_excel(df: pd.DataFrame, question_cols: List[str]) -> io.By
             '保健体育': ['保健', '体育', 'たいいく'],
             '芸術': ['音楽', '美術', '書道', '芸術'],
             '家庭': ['家庭', 'かてい'],
-            '情報': ['情報', 'じょうほう', 'Water', 'WS', 'SSP', 'SS'],
+            '情報': ['情報', 'じょうほう', 'Water', 'WS', 'SSP', 'SS', 'SSC', '水郷'],
         }
 
         # データに含まれる科目名を取得
