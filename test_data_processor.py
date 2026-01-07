@@ -1,63 +1,108 @@
 """
-data_processorモジュールの簡易テスト
+`data_processor`モジュールのテスト
 """
 
 import pandas as pd
+import pytest
+import numpy as np
 from data_processor import (
-    load_and_process_csv,
+    convert_to_score,
+    detect_subject_column,
+    detect_student_id_column,
+    detect_free_text_column,
+    identify_question_columns,
     calculate_statistics,
-    get_overall_average,
     extract_free_comments,
 )
 
+# テスト用のサンプルデータを作成するフィクスチャ
+@pytest.fixture
+def sample_df() -> pd.DataFrame:
+    """テスト用のサンプルDataFrameを生成する"""
+    data = {
+        "科目名": ["数学I", "数学I", "数学I", "数学I", "英語I"],
+        "学籍番号": ["1001", "1002", "1003", "1004", "1001"],
+        "授業の内容を理解できている": ["とてもそう思う", "そう思う", "あまりそう思わない", "思わない", "とてもそう思う"],
+        "授業のスピードは適切である": ["そう思う", "そう思う", "どちらかといえばそう思わない", pd.NA, "そう思う"],
+        "この授業に関して、意見や感想があれば記入してください": ["特になし", "面白いです", "", "改善点はありません", "楽しかった"]
+    }
+    return pd.DataFrame(data)
 
-def test_data_processing():
-    """データ処理機能のテスト"""
-    print("データ処理のテストを開始します...")
+# --- convert_to_score関数のテスト ---
+@pytest.mark.parametrize("text, expected", [
+    ("とてもそう思う", 4),
+    ("そう思う", 3),
+    ("あまりそう思わない", 2),
+    ("思わない", 1),
+    ("当てはまる", 4),
+    ("どちらかといえば当てはまる", 3),
+    ("全く当てはまらない", 1),
+    ("無関係なテキスト", None),
+    ("", None),
+    (None, None),
+    (np.nan, None),
+])
+def test_convert_to_score(text, expected):
+    """テキストからスコアへの変換をテストする"""
+    assert convert_to_score(text) == expected
 
-    # サンプルファイルを読み込み
-    sample_file = "sample_data/survey_数学I.csv"
-    print(f"\n1. ファイル読み込みテスト: {sample_file}")
+# --- カラム検出関数のテスト ---
+def test_detect_subject_column(sample_df):
+    """科目名カラムの検出をテストする"""
+    assert detect_subject_column(sample_df) == "科目名"
 
-    # ファイルを開いて処理
-    with open(sample_file, 'rb') as f:
-        df, metadata = load_and_process_csv(f)
+def test_detect_student_id_column(sample_df):
+    """学籍番号カラムの検出をテストする"""
+    assert detect_student_id_column(sample_df) == "学籍番号"
 
-    print(f"   ✓ 読み込み成功")
-    print(f"   - 回答数: {len(df)}件")
-    print(f"   - 科目カラム: {metadata['subject_column']}")
-    print(f"   - 質問項目数: {len(metadata['question_columns'])}項目")
-    print(f"   - 自由記述カラム: {metadata['free_text_column']}")
+def test_detect_free_text_column(sample_df):
+    """自由記述カラムの検出をテストする"""
+    assert detect_free_text_column(sample_df) == "この授業に関して、意見や感想があれば記入してください"
 
-    # 統計情報を計算
-    print("\n2. 統計計算テスト")
-    stats_df = calculate_statistics(df, metadata['question_columns'])
-    print(f"   ✓ 統計計算成功")
-    print(f"   - 集計された質問数: {len(stats_df)}項目")
+def test_identify_question_columns(sample_df):
+    """質問項目カラムの識別をテストする"""
+    expected = ["授業の内容を理解できている", "授業のスピードは適切である"]
+    assert identify_question_columns(sample_df) == expected
 
-    # 先頭3項目を表示
-    print("\n   上位3項目の統計:")
-    for idx, row in stats_df.head(3).iterrows():
-        print(f"   - {row['質問項目'][:30]}... : 平均 {row['平均値']:.2f}点")
+# --- calculate_statistics関数のテスト ---
+def test_calculate_statistics(sample_df):
+    """統計計算機能をテストする"""
+    question_cols = ["授業の内容を理解できている", "授業のスピードは適切である"]
+    stats = calculate_statistics(sample_df, question_cols)
 
-    # 総合平均を計算
-    print("\n3. 総合平均計算テスト")
-    overall_avg = get_overall_average(df, metadata['question_columns'])
-    print(f"   ✓ 総合平均: {overall_avg:.2f}点")
+    assert len(stats) == 2
+    assert "質問項目" in stats.columns
+    assert "平均値" in stats.columns
+    assert "有効回答数" in stats.columns
 
-    # 自由記述を抽出
-    print("\n4. 自由記述抽出テスト")
-    comments = extract_free_comments(
-        df,
-        metadata['free_text_column'],
-        exclude_empty=True
-    )
-    print(f"   ✓ 有効なコメント数: {len(comments)}件")
-    if comments:
-        print(f"   - サンプル: {comments[0][:50]}...")
+    # "授業の内容を理解できている" の統計を検証 (スコア: 4, 3, 2, 1, 4)
+    q1_stats = stats[stats["質問項目"] == "授業の内容を理解できている"].iloc[0]
+    assert q1_stats["有効回答数"] == 5
+    assert q1_stats["平均値"] == pytest.approx((4 + 3 + 2 + 1 + 4) / 5)
+    assert q1_stats["4点の回答数"] == 2
+    assert q1_stats["1点の回答数"] == 1
 
-    print("\n✅ すべてのテストが成功しました！")
+    # "授業のスピードは適切である" の統計を検証 (スコア: 3, 3, 2, NA, 3)
+    q2_stats = stats[stats["質問項目"] == "授業のスピードは適切である"].iloc[0]
+    assert q2_stats["有効回答数"] == 4
+    assert q2_stats["平均値"] == pytest.approx((3 + 3 + 2 + 3) / 4)
+    assert q2_stats["3点の回答数"] == 3
+    assert q2_stats["2点の回答数"] == 1
 
+# --- extract_free_comments関数のテスト ---
+def test_extract_free_comments(sample_df):
+    """自由記述の抽出をテストする"""
+    comment_col = "この授業に関して、意見や感想があれば記入してください"
+    
+    # 空コメントを除外する場合 (デフォルト)
+    comments_excluded = extract_free_comments(sample_df, comment_col)
+    assert comments_excluded == ["面白いです", "改善点はありません", "楽しかった"]
+    
+    # 空コメントを含める場合
+    comments_included = extract_free_comments(sample_df, comment_col, exclude_empty=False)
+    assert comments_included == ["特になし", "面白いです", "", "改善点はありません", "楽しかった"]
 
-if __name__ == "__main__":
-    test_data_processing()
+def test_extract_free_comments_no_column():
+    """自由記述カラムが存在しない場合のテスト"""
+    df = pd.DataFrame({'A': [1, 2]})
+    assert extract_free_comments(df, "non_existent_column") == []
