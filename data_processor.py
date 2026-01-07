@@ -87,6 +87,20 @@ FREE_TEXT_PATTERNS = [
 ]
 
 
+# 教科ごとの科目名マッピング
+SUBJECT_CATEGORY_MAPPING = {
+    '国語': ['国語', 'こくご', '現代の国語', '古典', '国語表現', '文学国語', '論理国語'],
+    '数学': ['数学', 'すうがく', '数学I', '数学A', '数学II', '数学B', '数学III', '数学C'],
+    '地歴公民': ['地理', '歴史', '公民', '地歴', '社会', '倫理', '政経', '世界史', '日本史', '地理総合', '歴史総合', '公共'],
+    '理科': ['理科', '物理', '化学', '生物', '地学', '物理基礎', '化学基礎', '生物基礎', '地学基礎'],
+    '外国語': ['英語', '外国語', 'English', '英', '英語コミュニケーションI', '英語コミュニケーションII', '英語コミュニケーションIII', '論理・表現I', '論理・表現II', '論理・表現III'],
+    '保健体育': ['保健', '体育', 'たいいく', '保健体育'],
+    '芸術': ['音楽', '美術', '書道', '芸術'],
+    '家庭': ['家庭', 'かてい', '家庭科'],
+    'SS探究': ['情報', 'じょうほう', 'Water', 'WS', '探究', 'SSP', 'SS', 'SSC', '水郷', '情報I', '情報II'],
+}
+
+
 def convert_to_score(value: str) -> Optional[float]:
     """
     4件法のテキスト回答を数値スコアに変換
@@ -473,7 +487,7 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
         '保健体育': 13,
         '芸術': 14,
         '家庭': 15,
-        'SS': 16,
+        'SS探究': 16,
     }
 
     # 科目カラムを検出
@@ -594,19 +608,8 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
                     ws.cell(row=row_idx, column=34, value=int(len(subject_df)))
         else:
             # デフォルトの自動マッピング（後方互換性のため）
-            # 教科名の部分一致用キーワード
-            subject_keywords = {
-                '国語': ['国語', 'こくご'],
-                '数学': ['数学', 'すうがく'],
-                '地歴公民': ['地理', '歴史', '公民', '地歴', '社会'],
-                '理科': ['理科', '物理', '化学', '生物', '地学'],
-                '外国語': ['英語', '外国語', 'English'],
-                '保健体育': ['保健', '体育', 'たいいく'],
-                '芸術': ['音楽', '美術', '書道', '芸術'],
-                '家庭': ['家庭', 'かてい'],
-                '情報': ['情報', 'じょうほう'],
-            }
-
+            # 教科名の部分一致用キーワードはSUBJECT_CATEGORY_MAPPINGを使用
+            
             # データに含まれる教科名を取得
             unique_subjects = df[subject_col].unique()
 
@@ -617,7 +620,8 @@ def write_to_template(df: pd.DataFrame, question_cols: List[str],
 
                 # 部分一致で教科を検索
                 matched_subjects = []
-                keywords = subject_keywords.get(template_subject, [])
+                # SUBJECT_CATEGORY_MAPPINGからキーワードを取得
+                keywords = SUBJECT_CATEGORY_MAPPING.get(template_subject, [])
 
                 for actual_subject in unique_subjects:
                     if pd.isna(actual_subject):
@@ -937,18 +941,8 @@ def create_integrated_excel(df: pd.DataFrame, question_cols: List[str]) -> io.By
     # 各教科のシートを作成
     # ========================================
     if subject_col and subject_col in df.columns:
-        # 教科名のグループ化用キーワード
-        subject_groups = {
-            '国語': ['国語', 'こくご', '古典'],
-            '数学': ['数学', 'すうがく'],
-            '地歴公民': ['地理', '歴史', '公民', '地歴', '社会', '倫理', '政経', '地理', '世界史'],
-            '理科': ['理科', '物理', '化学', '生物', '地学'],
-            '外国語': ['英語', '外国語', 'English', '英'],
-            '保健体育': ['保健', '体育', 'たいいく'],
-            '芸術': ['音楽', '美術', '書道', '芸術'],
-            '家庭': ['家庭', 'かてい'],
-            '情報': ['情報', 'じょうほう', 'Water', 'WS', 'SSP', 'SS', 'SSC', '水郷'],
-        }
+        # 教科名のグループ化用キーワードはSUBJECT_CATEGORY_MAPPINGを使用
+        subject_groups = SUBJECT_CATEGORY_MAPPING
 
         # データに含まれる科目名を取得
         unique_subjects = sorted([str(s) for s in df[subject_col].unique() if pd.notna(s)])
@@ -1169,18 +1163,8 @@ def create_integrated_raw_data_excel(df: pd.DataFrame) -> io.BytesIO:
     # 各教科のシートを作成（教科ごとの生データ）
     # ========================================
     if subject_col and subject_col in df.columns:
-        # 教科名のグループ化用キーワード
-        subject_groups = {
-            '国語': ['国語', 'こくご'],
-            '数学': ['数学', 'すうがく'],
-            '地歴公民': ['地理', '歴史', '公民', '地歴', '社会', '倫理', '政経'],
-            '理科': ['理科', '物理', '化学', '生物', '地学'],
-            '外国語': ['英語', '外国語', 'English', '英'],
-            '保健体育': ['保健', '体育', 'たいいく'],
-            '芸術': ['音楽', '美術', '書道', '芸術'],
-            '家庭': ['家庭', 'かてい'],
-            '情報': ['情報', 'じょうほう', 'Water', 'WS', '探究', 'SSP', 'SS'],
-        }
+        # 教科名のグループ化用キーワードはSUBJECT_CATEGORY_MAPPINGを使用
+        subject_groups = SUBJECT_CATEGORY_MAPPING
 
         # データに含まれる科目名を取得
         unique_subjects = sorted([str(s) for s in df[subject_col].unique() if pd.notna(s)])
